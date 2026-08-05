@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Format + lint + typecheck
+        run: npm run check
+      - name: Unit / integration / property
+        run: npm test
+      - name: Memory harness
+        run: npm run test:memory
+      - name: Bench smoke
+        run: npm run bench -- --smoke
+      - name: Doc build
+        run: npm run docs:build
