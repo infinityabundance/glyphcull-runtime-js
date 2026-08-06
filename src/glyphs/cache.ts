@@ -52,6 +52,8 @@ export interface GlyphStamp {
   /** The atlas page texture dimensions (for shader normalization). */
   readonly pageWidth: number;
   readonly pageHeight: number;
+  /** The atlas density (texels per em). */
+  readonly texelsPerEm: number;
   /** Estimated bytes (quad + key + fixed overhead). */
   readonly sizeBytes: number;
 }
@@ -97,6 +99,7 @@ export function prepareGlyph(
     combining: glyph.combining,
     pageWidth: atlas.pageWidth,
     pageHeight: atlas.pageHeight,
+    texelsPerEm: tpe,
     sizeBytes: STAMP_OVERHEAD + 64,
   };
 }
