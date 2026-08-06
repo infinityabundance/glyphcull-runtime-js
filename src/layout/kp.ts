@@ -168,7 +168,20 @@ export function lineBreak(
         // The node stays active: its sequence can still extend further.
         remaining.push(node);
       }
-      active = remaining.concat(newNodes);
+      // The paper keeps at most one active node per (breakpoint, fitness)
+      // class: the future cost of a line starting at this breakpoint depends
+      // only on its prefix sums and fitness class, so only the minimal-
+      // demerits path to each class can ever win. Without this deduplication
+      // every feasible node would spawn a copy at every later breakpoint and
+      // the active list would double per breakpoint (exponential blowup).
+      const best = new Map<number, ActiveNode>();
+      for (const node of newNodes) {
+        const previous = best.get(node.fitness);
+        if (previous === undefined || node.sumDemerits < previous.sumDemerits) {
+          best.set(node.fitness, node);
+        }
+      }
+      active = remaining.concat([...best.values()]);
     }
 
     // The last item is a feasible breakpoint (caller guarantees it).

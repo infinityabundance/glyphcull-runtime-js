@@ -73,8 +73,24 @@ export function tokenizeForBreaking(text: string): TextToken[] {
     }
     if (CJK.test(ch)) {
       // CJK: each char is its own box; breaks are allowed between them.
-      tokens.push({ text: ch, breakAfter: BreakClass.Allowed });
-      i += charLen;
+      // Closing CJK punctuation binds to the preceding character (no break
+      // between them, UAX #29 CL/NS semantics).
+      let j = i + charLen;
+      while (j < n) {
+        const nextCp = text.codePointAt(j)!;
+        const nextCh = String.fromCodePoint(nextCp);
+        const nextLen = nextCh.length;
+        if (PUNCTUATION.test(nextCh) && NO_BREAK_BEFORE.test(nextCh)) {
+          j += nextLen;
+          continue;
+        }
+        break;
+      }
+      tokens.push({
+        text: text.slice(i, j),
+        breakAfter: j < n ? BreakClass.Allowed : BreakClass.Forbidden,
+      });
+      i = j;
       continue;
     }
     // A word run: letters/digits/underscore/contraction apostrophe.
@@ -97,10 +113,19 @@ export function tokenizeForBreaking(text: string): TextToken[] {
           j += nextLen;
           continue;
         }
+        if (NO_BREAK_AFTER.test(nextCh) && j === i) {
+          // An opening punctuation at the token start binds to the following
+          // word (a break is forbidden after it): '('hello' → one token.
+          j += nextLen;
+          continue;
+        }
         break;
       }
       break;
     }
+    // Defensive: never emit an empty token — the scan always consumes at
+    // least the current character (a symbol that binds neither way, e.g. '$').
+    if (j === i) j = i + charLen;
     // Decide the break after this word based on the next character.
     const nextStart = j;
     let breakAfter: BreakClass;
