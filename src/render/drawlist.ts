@@ -14,6 +14,7 @@ import type { LayoutEngine, LineLayout, BlockLayout } from '../layout/layout.js'
 import type { GlyphInstance } from '../layout/layout.js';
 import { ChunkKind } from '../format/sections.js';
 import { measureRun } from '../layout/measure.js';
+import type { SelectionQuad } from '../selection/selection.js';
 
 /** A textured glyph quad. */
 export interface GlyphCommand {
@@ -65,14 +66,6 @@ export type DrawCommand = GlyphCommand | ImageCommand | FillCommand | RulerComma
 /** An ordered sequence of draw commands. */
 export interface DrawList {
   readonly commands: readonly DrawCommand[];
-}
-
-/** A selection highlight quad (in document pixels). */
-export interface SelectionQuad {
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
 }
 
 /** A texture resolver: glyph stamp page / image id → renderer texture handle. */

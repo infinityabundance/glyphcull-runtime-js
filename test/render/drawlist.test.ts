@@ -14,12 +14,8 @@ import type { GlyphStamp } from '../../src/glyphs/cache.js';
 import { LayoutEngine } from '../../src/layout/layout.js';
 import type { GlyphInstance } from '../../src/layout/layout.js';
 import { DrawListBuilder } from '../../src/render/drawlist.js';
-import type {
-  DrawCommand,
-  DrawList,
-  SelectionQuad,
-  TextureResolver,
-} from '../../src/render/drawlist.js';
+import type { DrawCommand, DrawList, TextureResolver } from '../../src/render/drawlist.js';
+import type { SelectionQuad } from '../../src/selection/selection.js';
 import { pipelineGolden } from '../testkit/fixtures.js';
 import { buildPackage, chnkPayload, contPayload, infoPayload } from '../testkit/builder.js';
 
