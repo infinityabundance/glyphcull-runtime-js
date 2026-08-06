@@ -19,8 +19,12 @@
 import { DocumentHost } from './api/runtime.js';
 import type { Document, LoadOptions } from './api/runtime.js';
 import { RuntimeError } from './api/errors.js';
+import type { RuntimeErrorKind } from './api/errors.js';
 import { CullError } from './format/errors.js';
+import type { ErrorKind } from './format/errors.js';
 import { DocumentError } from './document/model.js';
+import type { DocumentErrorKind } from './document/model.js';
+import type { Clock } from './clock.js';
 import type { Point, Selection, SelectionQuad, TextPosition } from './selection/selection.js';
 import type { Viewport } from './visibility/visibility.js';
 
@@ -34,5 +38,17 @@ export async function load(source: Uint8Array, options: LoadOptions): Promise<Do
   return DocumentHost.load(source, options);
 }
 
-export type { Document, LoadOptions, Point, Selection, SelectionQuad, TextPosition, Viewport };
+export type {
+  Clock,
+  Document,
+  DocumentErrorKind,
+  ErrorKind,
+  LoadOptions,
+  Point,
+  RuntimeErrorKind,
+  Selection,
+  SelectionQuad,
+  TextPosition,
+  Viewport,
+};
 export { CullError, DocumentError, RuntimeError };
