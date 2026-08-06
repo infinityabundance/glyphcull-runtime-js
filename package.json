@@ -1,0 +1,48 @@
+{
+  "name": "glyphcull-runtime-js",
+  "version": "0.1.0",
+  "description": "The GlyphCull JavaScript document runtime: a compiled-document host for .cull packages (load/scroll/paint/select/copy/destroy).",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "npm run fmt:check && npm run lint && npm run typecheck",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:memory": "node --expose-gc scripts/memory-harness.mjs",
+    "bench": "vitest bench",
+    "bench:smoke": "vitest bench --run",
+    "docs:build": "typedoc",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.1.2",
+    "eslint": "^10.8.0",
+    "fast-check": "^4.9.0",
+    "prettier": "^3.9.6",
+    "typedoc": "^0.28.20",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^4.1.10"
+  }
+}
