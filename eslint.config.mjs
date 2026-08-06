@@ -3,7 +3,14 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/', 'node_modules/', 'coverage/', 'test-results/', 'playwright-report/', '*.tsbuildinfo'],
+    ignores: [
+      'dist/',
+      'node_modules/',
+      'coverage/',
+      'test-results/',
+      'playwright-report/',
+      '*.tsbuildinfo',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -28,7 +35,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ['test/**/*.ts', 'bench/**/*.ts', 'test/**/*.mjs', 'scripts/**/*.mjs', 'vitest.config.ts', 'playwright.config.ts'],
+    files: [
+      'test/**/*.ts',
+      'bench/**/*.ts',
+      'test/**/*.mjs',
+      'scripts/**/*.mjs',
+      'vitest.config.ts',
+      'playwright.config.ts',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',

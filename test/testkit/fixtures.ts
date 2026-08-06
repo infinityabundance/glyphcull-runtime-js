@@ -34,22 +34,27 @@ export const goldenCss = 'p { color: #336699; }\n';
 /**
  * Expected diagnostics for `pipeline-golden.cull`, pinned from the compiler's
  * `cull inspect` output. Any drift in the fixture or the reader fails here.
+ *
+ * NOTE: the fixture tracks the compiler's golden, which changed in the
+ * compiler commit "Fix chunk partition dropping list-item, code-block, and
+ * cell text" (22 chunks / 12 content: tight-list items and code blocks now
+ * carry their text).
  */
 export const pipelineGoldenExpected = {
-  documentId: '8d6fd4074ac6e80e41255d252504f9d1',
+  documentId: 'f57f294d46f2a0bc309002ad9ebe60f2',
   sourceDigest: '47869ba2d830d7e8599b594a98b1e446f79f85a474f8760f22eb99ba0afc70f9',
   generator: 'glyphcull-compiler',
-  chunkCount: 18,
+  chunkCount: 22,
   styleCount: 11,
-  contentCount: 9,
+  contentCount: 12,
   atlasCount: 3,
   imageCount: 0,
   /** Section kinds in file order. */
   sectionKinds: [1, 2, 3, 4, 5, 7],
-  /** (font_id, weight, italic, glyphs, kerning, pageWidth) per atlas. */
+  /** (font_id, weight, italic, glyphs, kerning, pageWidth, pages) per atlas. */
   atlases: [
-    { fontId: 0, weight: 400, italic: false, glyphs: 19, kerning: 10, pageWidth: 256 },
-    { fontId: 1, weight: 400, italic: true, glyphs: 6, kerning: 0, pageWidth: 128 },
-    { fontId: 2, weight: 700, italic: false, glyphs: 12, kerning: 8, pageWidth: 256 },
+    { fontId: 0, weight: 400, italic: false, glyphs: 21, kerning: 12, pageWidth: 256, pages: 2 },
+    { fontId: 1, weight: 400, italic: true, glyphs: 6, kerning: 0, pageWidth: 128, pages: 1 },
+    { fontId: 2, weight: 700, italic: false, glyphs: 12, kerning: 8, pageWidth: 256, pages: 1 },
   ],
 };

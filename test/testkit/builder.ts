@@ -95,3 +95,82 @@ export function emptyChnkPayload(): Uint8Array {
   new DataView(out.buffer).setUint32(4, 0, true);
   return out;
 }
+
+/** A minimal chunk record for test fixtures. */
+export interface TestChunk {
+  id: number;
+  kind: number;
+  flags?: number;
+  styleId?: number;
+  parentId?: number;
+  prevId?: number;
+  nextId?: number;
+  firstChildId?: number;
+  lastChildId?: number;
+  contentIndex?: number;
+  ordinal?: number;
+  depth?: number;
+}
+
+/** Encode a CHNK payload from chunk records (SPEC.md §2.2). */
+export function chnkPayload(chunks: TestChunk[], extras: Uint8Array[] = []): Uint8Array {
+  const RECORD = 44;
+  const out = new Uint8Array(
+    4 + chunks.length * RECORD + 4 + extras.reduce((a, e) => a + 8 + e.length, 0),
+  );
+  const dv = new DataView(out.buffer);
+  let pos = 0;
+  dv.setUint32(pos, chunks.length, true);
+  pos += 4;
+  for (const c of chunks) {
+    dv.setUint32(pos, c.id, true);
+    out[pos + 4] = c.kind;
+    out[pos + 5] = c.flags ?? 0;
+    dv.setUint16(pos + 6, 0, true); // reserved
+    dv.setUint32(pos + 8, c.styleId ?? 0, true);
+    dv.setUint32(pos + 12, c.parentId ?? 0, true);
+    dv.setUint32(pos + 16, c.prevId ?? 0, true);
+    dv.setUint32(pos + 20, c.nextId ?? 0, true);
+    dv.setUint32(pos + 24, c.firstChildId ?? 0, true);
+    dv.setUint32(pos + 28, c.lastChildId ?? 0, true);
+    dv.setUint32(pos + 32, c.contentIndex ?? 0, true);
+    dv.setUint32(pos + 36, c.ordinal ?? c.id - 1, true);
+    dv.setUint32(pos + 40, c.depth ?? 0, true);
+    pos += RECORD;
+  }
+  dv.setUint32(pos, extras.length, true);
+  pos += 4;
+  for (const extra of extras) {
+    out.set(extra, pos);
+    pos += extra.length;
+  }
+  return out;
+}
+
+/** Encode a text CONT payload section (SPEC.md §2.4). */
+export function contPayload(texts: string[], imageRefs: number[] = []): Uint8Array {
+  const encoder = new TextEncoder();
+  const payloads: { data: Uint8Array; kind: number }[] = [];
+  for (const text of texts) payloads.push({ data: encoder.encode(text), kind: 0 });
+  for (const imageId of imageRefs) {
+    const data = new Uint8Array(4);
+    new DataView(data.buffer).setUint32(0, imageId, true);
+    payloads.push({ data, kind: 1 });
+  }
+  const total = payloads.reduce((a, p) => a + 12 + p.data.length, 0);
+  const out = new Uint8Array(4 + total);
+  const dv = new DataView(out.buffer);
+  let pos = 0;
+  dv.setUint32(pos, payloads.length, true);
+  pos += 4;
+  for (let i = 0; i < payloads.length; i++) {
+    dv.setUint32(pos, i, true);
+    out[pos + 4] = payloads[i]!.kind;
+    out[pos + 5] = 0;
+    dv.setUint16(pos + 6, 0, true);
+    dv.setUint32(pos + 8, payloads[i]!.data.length, true);
+    out.set(payloads[i]!.data, pos + 12);
+    pos += 12 + payloads[i]!.data.length;
+  }
+  return out;
+}

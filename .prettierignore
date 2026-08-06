@@ -1,0 +1,6 @@
+# Documentation is authored deliberately (ASCII architecture diagrams,
+# tables); prettier's markdown pass would restructure it without benefit.
+*.md
+node_modules/
+dist/
+coverage/

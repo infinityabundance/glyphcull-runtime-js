@@ -123,7 +123,7 @@ describe('full package read', () => {
     if (!result.ok) return;
     const chunks = result.value.chunkSection();
     expect(chunks).toBeDefined();
-    expect(chunks!.chunks).toHaveLength(18);
+    expect(chunks!.chunks).toHaveLength(22);
     expect(chunks!.extras).toHaveLength(1);
     expect(chunks!.extras[0]!.kind).toBe(ExtraKind.LinkTarget);
     expect(chunks!.extras[0]!.data).toMatchObject({ url: 'https://example.com' });
@@ -135,12 +135,12 @@ describe('full package read', () => {
     }
     expect(census.get(ChunkKind.Document)).toBe(1);
     expect(census.get(ChunkKind.Heading1)).toBe(1);
-    expect(census.get(ChunkKind.Paragraph)).toBe(2);
+    expect(census.get(ChunkKind.Paragraph)).toBe(4);
     expect(census.get(ChunkKind.List)).toBe(1);
     expect(census.get(ChunkKind.ListItem)).toBe(2);
     expect(census.get(ChunkKind.CodeBlock)).toBe(1);
     expect(census.get(ChunkKind.Quote)).toBe(1);
-    expect(census.get(ChunkKind.Run)).toBe(9);
+    expect(census.get(ChunkKind.Run)).toBe(11);
 
     // Tree invariants hold on the parsed records.
     const byId = new Map(chunks!.chunks.map((c) => [c.id, c]));
@@ -196,8 +196,12 @@ describe('full package read', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const content = result.value.content();
-    expect(content).toHaveLength(9);
+    expect(content).toHaveLength(12);
     expect(content!.every((p) => p.kind === PayloadKind.TextUtf8)).toBe(true);
+    const texts = content!.map((p) => (p.kind === PayloadKind.TextUtf8 ? p.text : ''));
+    expect(texts).toContain('one');
+    expect(texts).toContain('two');
+    expect(texts.join('')).toContain('code block');
   });
 
   it('decodes the three atlases with pinned descriptors', async () => {
@@ -215,7 +219,7 @@ describe('full package read', () => {
       expect(atlas!.kerning.size).toBeLessThanOrEqual(expected.kerning);
       expect(atlas!.pageWidth).toBe(expected.pageWidth);
       expect(texelsPerEm(atlas!)).toBe(32);
-      expect(atlas!.pages).toHaveLength(1);
+      expect(atlas!.pages).toHaveLength(expected.pages);
       expect(atlas!.pages[0]!.length).toBe(atlas!.pageWidth * atlas!.pageHeight * 4);
     }
   });
