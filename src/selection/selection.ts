@@ -207,6 +207,20 @@ function coveredPiece(line: LineLayout, run: RunLayout, from: number, to: number
   return { x: xMin, y: line.y, w: Math.max(0, xMax - xMin), h: line.heightPx };
 }
 
+/** The chunk ids between the selection's endpoints, inclusive, document order. */
+export function coveredChunkIds(doc: DocumentModel, selection: Selection): number[] {
+  if (isCollapsed(selection)) return [];
+  const index = orderIndex(doc);
+  const startIndex = index.get(selection.start.chunkId) ?? 0;
+  const endIndex = index.get(selection.end.chunkId) ?? 0;
+  const out: number[] = [];
+  for (const id of doc.allIds()) {
+    const i = index.get(id) ?? 0;
+    if (i >= startIndex && i <= endIndex) out.push(id);
+  }
+  return out;
+}
+
 /**
  * Extract the plain text covered by a selection, preserving document order
  * with the boundary policy in the module doc. A collapsed selection returns
