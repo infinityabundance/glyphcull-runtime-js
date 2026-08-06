@@ -1,7 +1,8 @@
 import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import { defineConfig } from 'eslint/config';
+import { configs as tseslintConfigs } from 'typescript-eslint';
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: [
       'dist/',
@@ -13,12 +14,17 @@ export default tseslint.config(
     ],
   },
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
+  ...tseslintConfigs.strictTypeChecked,
+  ...tseslintConfigs.stylisticTypeChecked,
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          // The flat config file is not part of any tsconfig program (it is
+          // plain ESM, not type-checked source); the service lints it in
+          // isolation rather than failing the whole run.
+          allowDefaultProject: ['eslint.config.mjs'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
