@@ -33,7 +33,7 @@ export enum ChunkState {
 
 /** The lifecycle events that drive transitions. */
 export type LifecycleEvent =
-  'enqueue' | 'begin' | 'dequeue' | 'complete' | 'cancel' | 'cull' | 'requeue' | 'expire';
+  'enqueue' | 'begin' | 'dequeue' | 'complete' | 'cancel' | 'pause' | 'cull' | 'requeue' | 'expire';
 
 /** One recorded transition. */
 export interface Transition {
@@ -63,7 +63,7 @@ export class LifecycleError extends Error {
 const TRANSITIONS: Record<ChunkState, LifecycleEvent[]> = {
   [ChunkState.Compressed]: ['enqueue'],
   [ChunkState.Queued]: ['begin', 'dequeue'],
-  [ChunkState.Materializing]: ['complete', 'cancel'],
+  [ChunkState.Materializing]: ['complete', 'cancel', 'pause'],
   [ChunkState.Visible]: ['cull'],
   [ChunkState.Cooling]: ['requeue', 'expire'],
   [ChunkState.Evicted]: ['enqueue'],
@@ -82,6 +82,8 @@ function destination(event: LifecycleEvent): ChunkState {
       return ChunkState.Visible;
     case 'cancel':
       return ChunkState.Compressed;
+    case 'pause':
+      return ChunkState.Queued;
     case 'cull':
       return ChunkState.Cooling;
     case 'requeue':
@@ -255,7 +257,7 @@ export class LifecycleManager {
     const to = destination(event);
     this.states.set(chunkId, to);
     this.log.push({ chunkId, event, from: state, to, time: this.clock.now() });
-    if (event === 'requeue' || event === 'cancel' || event === 'dequeue') {
+    if (event === 'requeue' || event === 'cancel' || event === 'dequeue' || event === 'expire') {
       this.coolingStartedAt.delete(chunkId);
     }
     if (to === ChunkState.Queued) {

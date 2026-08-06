@@ -14,6 +14,7 @@ const EVENTS: LifecycleEvent[] = [
   'dequeue',
   'complete',
   'cancel',
+  'pause',
   'cull',
   'requeue',
   'expire',
@@ -43,7 +44,9 @@ function referenceDestination(state: ChunkState, event: LifecycleEvent): ChunkSt
         ? ChunkState.Visible
         : event === 'cancel'
           ? ChunkState.Compressed
-          : 'reject';
+          : event === 'pause'
+            ? ChunkState.Queued
+            : 'reject';
     case ChunkState.Visible:
       return event === 'cull' ? ChunkState.Cooling : 'reject';
     case ChunkState.Cooling:
