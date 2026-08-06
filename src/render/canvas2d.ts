@@ -13,14 +13,12 @@
 import type { DrawCommand, DrawList } from './drawlist.js';
 import type { RendererAdapter, RendererViewport } from './adapter.js';
 import { straightComponents } from './adapter.js';
-import { reconstruct } from './msdf.js';
+import { coverageAt } from './msdf.js';
 
 /** Options for the Canvas 2D renderer. */
 export interface Canvas2dOptions {
   /** The canvas to render into. */
   readonly canvas: HTMLCanvasElement;
-  /** Supersampling for the CPU glyph rasterization (1 = fast, 2+ = quality). */
-  readonly samplesPerTexel?: number;
   /** The raster cache budget in bytes (default 4 MiB). */
   readonly rasterBudgetBytes?: number;
 }
@@ -48,7 +46,6 @@ const BITMAP_OVERHEAD = 256;
  */
 export class Canvas2dRenderer implements RendererAdapter {
   private readonly canvas: HTMLCanvasElement;
-  private readonly samplesPerTexel: number;
   private readonly rasterBudgetBytes: number;
   private readonly ctx: CanvasRenderingContext2D | null;
   /** texture handle → atlas page pixels. */
@@ -65,7 +62,6 @@ export class Canvas2dRenderer implements RendererAdapter {
 
   constructor(options: Canvas2dOptions) {
     this.canvas = options.canvas;
-    this.samplesPerTexel = Math.max(1, options.samplesPerTexel ?? 2);
     this.rasterBudgetBytes = options.rasterBudgetBytes ?? DEFAULT_RASTER_BUDGET;
     if (!Number.isFinite(this.rasterBudgetBytes) || this.rasterBudgetBytes < 0) {
       throw new RangeError(
@@ -162,15 +158,21 @@ export class Canvas2dRenderer implements RendererAdapter {
   ): void {
     const page = this.pages.get(command.texture);
     if (page === undefined) return;
-    // Rasterize at device resolution so the bitmap maps 1:1 under the DPR
-    // transform (sharp at every scale; the AA edge is in device px).
+    // Rasterize at device resolution and blit at integer device coordinates:
+    // each bitmap pixel is the field sampled at exactly its device pixel's
+    // center, so the placement is phase-exact and drawImage never resamples
+    // (sharp at every scale; the AA edge is in device px).
     const bw = Math.max(1, Math.round(command.w * dpr));
     const bh = Math.max(1, Math.round(command.h * dpr));
-    const key = `${command.texture}|${command.uv.join(',')}|${bw}x${bh}|${command.color.toString(16)}`;
+    const x0 = Math.round(command.x * dpr);
+    const y0 = Math.round(command.y * dpr);
+    const phaseX = x0 - command.x * dpr;
+    const phaseY = y0 - command.y * dpr;
+    const key = `${command.texture}|${command.uv.join(',')}|${bw}x${bh}|${command.color.toString(16)}|${phaseX},${phaseY}`;
     let entry = this.rasterCache.get(key);
     if (entry === undefined) {
       entry = {
-        bitmap: this.rasterize(page, command, bw, bh, dpr),
+        bitmap: this.rasterize(page, command, bw, bh, x0, y0, dpr),
         bytes: bw * bh * 4 + BITMAP_OVERHEAD,
       };
       this.rasterCache.set(key, entry);
@@ -181,7 +183,8 @@ export class Canvas2dRenderer implements RendererAdapter {
       this.rasterCache.delete(key);
       this.rasterCache.set(key, entry);
     }
-    ctx.drawImage(entry.bitmap, command.x, command.y, command.w, command.h);
+    // Integer device placement under the DPR transform: no resampling.
+    ctx.drawImage(entry.bitmap, x0 / dpr, y0 / dpr, bw / dpr, bh / dpr);
   }
 
   /** Rasterize the glyph quad from the MSDF page via the shared math. */
@@ -190,6 +193,8 @@ export class Canvas2dRenderer implements RendererAdapter {
     command: Extract<DrawCommand, { type: 'glyph' }>,
     bw: number,
     bh: number,
+    x0: number,
+    y0: number,
     dpr: number,
   ): HTMLCanvasElement {
     const out = document.createElement('canvas');
@@ -202,30 +207,27 @@ export class Canvas2dRenderer implements RendererAdapter {
     const boxY = v0 * page.height;
     const boxW = (u1 - u0) * page.width;
     const boxH = (v1 - v0) * page.height;
-    const coverage = reconstruct(
-      page.pixels,
-      page.width,
-      boxX,
-      boxY,
-      boxW,
-      boxH,
-      bw,
-      bh,
-      command.pxPerTexel * dpr,
-      this.samplesPerTexel,
-    );
+    // The exact device→texel mapping (the shared pixel-center convention):
+    // device pixel (x0+ox, y0+oy) samples the field at its center.
+    const scaleX = boxW / (command.w * dpr);
+    const scaleY = boxH / (command.h * dpr);
+    const texelToPx = command.pxPerTexel * dpr;
     const imageData = outCtx.createImageData(bw, bh);
     const [r, g, b, a] = straightComponents(command.color);
     const src = imageData.data;
-    for (let i = 0; i < coverage.length; i++) {
-      const c = coverage[i]! / 255;
-      const j = i * 4;
-      // Straight color + coverage-scaled alpha: putImageData premultiplies
-      // into the backing store, matching the GL blend (see module doc).
-      src[j] = Math.round(r * 255);
-      src[j + 1] = Math.round(g * 255);
-      src[j + 2] = Math.round(b * 255);
-      src[j + 3] = Math.round(a * c * 255);
+    for (let oy = 0; oy < bh; oy++) {
+      const ty = boxY + (y0 + oy + 0.5 - command.y * dpr) * scaleY;
+      for (let ox = 0; ox < bw; ox++) {
+        const tx = boxX + (x0 + ox + 0.5 - command.x * dpr) * scaleX;
+        const c = coverageAt(page.pixels, page.width, tx, ty, texelToPx);
+        const j = (oy * bw + ox) * 4;
+        // Straight color + coverage-scaled alpha: putImageData premultiplies
+        // into the backing store, matching the GL blend (see module doc).
+        src[j] = Math.round(r * 255);
+        src[j + 1] = Math.round(g * 255);
+        src[j + 2] = Math.round(b * 255);
+        src[j + 3] = Math.round(a * c * 255);
+      }
     }
     outCtx.putImageData(imageData, 0, 0);
     return out;

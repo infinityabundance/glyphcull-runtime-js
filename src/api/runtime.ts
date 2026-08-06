@@ -439,5 +439,5 @@ function createRenderer(
       throw new RuntimeError('renderer-unavailable', 'WebGL was requested but is unavailable');
     }
   }
-  return new Canvas2dRenderer({ canvas, samplesPerTexel: 2 });
+  return new Canvas2dRenderer({ canvas });
 }

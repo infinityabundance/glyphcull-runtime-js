@@ -99,7 +99,7 @@ export function reconstruct(
         for (let sx = 0; sx < ss; sx++) {
           const tx = boxX + (x + (sx + 0.5) / ss) * stepX;
           const ty = boxY + (y + (sy + 0.5) / ss) * stepY;
-          acc += sampleCoverage(page, pageWidth, tx, ty, texelToPx);
+          acc += coverageAt(page, pageWidth, tx, ty, texelToPx);
         }
       }
       out[y * outW + x] = Math.round((acc / (ss * ss)) * 255);
@@ -137,8 +137,13 @@ export function reconstructGlyph(
   );
 }
 
-/** Bilinearly sample the MSDF field and reconstruct coverage at (tx, ty). */
-function sampleCoverage(
+/**
+ * The MSDF coverage at an arbitrary point in texel space — the exact function
+ * the WebGL shader evaluates per fragment (bilinear per channel, median,
+ * smoothstep). The rendering validation samples it at fragment centers
+ * `boxX + (dx + 0.5 − quadX) · boxW / quadW` to reproduce the GPU exactly.
+ */
+export function coverageAt(
   page: Uint8Array,
   pageWidth: number,
   tx: number,

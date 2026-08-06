@@ -23,7 +23,10 @@ void main() {
   vUv = aUv;
   vColor = aColor;
   vPxRange = aPxRange;
-  gl_Position = vec4((aPos * uScale + uOffset) * 2.0 - 1.0, 0.0, 1.0);
+  // Document y grows down; NDC y grows up (the canvas displays GL top at
+  // row 0), so the projected y is negated.
+  vec2 ndc = (aPos * uScale + uOffset) * 2.0 - 1.0;
+  gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
 }
 `;
 
@@ -63,7 +66,10 @@ export class WebGlRenderer implements RendererAdapter {
   private gl: WebGLRenderingContext | null = null;
   private program: WebGLProgram | null = null;
   private whiteTexture: WebGLTexture | null = null;
-  private readonly textures = new Map<number, WebGLTexture>();
+  private readonly textures = new Map<
+    number,
+    { texture: WebGLTexture; width: number; height: number }
+  >();
   private readonly pageHandles = new Map<string, number>();
   private readonly imageHandles = new Map<number, number>();
   private nextHandle = 2;
@@ -179,16 +185,14 @@ export class WebGlRenderer implements RendererAdapter {
   private uploadTexture(handle: number, pixels: Uint8Array, width: number, height: number): void {
     const gl = this.gl;
     if (gl === null) return;
-    let texture = this.textures.get(handle);
-    if (texture === undefined) {
-      // Same nullable widening as init(): the DOM lib types createTexture as
-      // non-null, but drivers can fail.
+    let entry = this.textures.get(handle);
+    if (entry === undefined) {
       const created = gl.createTexture() as WebGLTexture | null;
       if (created === null) throw new Error('WebGL texture allocation failed');
-      texture = created;
-      this.textures.set(handle, texture);
+      entry = { texture: created, width, height };
+      this.textures.set(handle, entry);
     }
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -276,10 +280,10 @@ export class WebGlRenderer implements RendererAdapter {
   }
 
   private drawImageQuad(command: Extract<DrawCommand, { type: 'image' }>): void {
-    const texture = this.textures.get(command.texture);
-    if (texture === undefined) return;
+    const entry = this.textures.get(command.texture);
+    if (entry === undefined) return;
     const gl = this.gl!;
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     this.drawOneQuad(command.x, command.y, command.w, command.h, 0, 0, 1, 1, 1, 1, 1, 1, 1);
     // Images are opaque; the white-tint with coverage 1 renders them 1:1.
   }
@@ -290,14 +294,21 @@ export class WebGlRenderer implements RendererAdapter {
     viewport: RendererViewport,
   ): void {
     const gl = this.gl!;
-    const texture = this.textures.get(textureHandle);
-    if (texture === undefined) return;
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    const entry = this.textures.get(textureHandle);
+    if (entry === undefined) return;
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    // GLSL texture2D LINEAR samples at uv·size − 0.5 (texel centers at
+    // integers); the reference and the Canvas 2D fallback sample at pixel
+    // centers (uv·size). Shift the glyph UVs half a texel so all three agree
+    // exactly (the MSDF ink placement matches the CPU rasterizer).
+    const halfTexelU = 0.5 / entry.width;
+    const halfTexelV = 0.5 / entry.height;
     const data = new Float32Array(commands.length * 6 * 9);
     let o = 0;
     for (const command of commands) {
       const [r, g, b, a] = rgbaComponents(command.color);
       const pxRange = command.pxPerTexel * viewport.dpr;
+      const [u0, v0, u1, v1] = command.uv;
       pushQuad(
         data,
         o,
@@ -305,7 +316,7 @@ export class WebGlRenderer implements RendererAdapter {
         command.y,
         command.w,
         command.h,
-        command.uv,
+        [u0 + halfTexelU, v0 + halfTexelV, u1 + halfTexelU, v1 + halfTexelV],
         r,
         g,
         b,
