@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:memory": "node --expose-gc scripts/memory-harness.mjs",
+    "test:memory": "npm run build && node --expose-gc scripts/memory-harness.mjs",
     "bench": "vitest bench",
     "bench:smoke": "vitest bench --run",
     "docs:build": "typedoc",

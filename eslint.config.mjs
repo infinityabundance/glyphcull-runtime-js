@@ -21,10 +21,14 @@ export default defineConfig(
     languageOptions: {
       parserOptions: {
         projectService: {
-          // The flat config file is not part of any tsconfig program (it is
-          // plain ESM, not type-checked source); the service lints it in
-          // isolation rather than failing the whole run.
-          allowDefaultProject: ['eslint.config.mjs'],
+          // The flat config and the plain-JS scripts are not part of any
+          // tsconfig program (plain ESM, not type-checked source); the
+          // service lints them in isolation rather than failing the run.
+          allowDefaultProject: [
+            'eslint.config.mjs',
+            'scripts/browser-harness/server.mjs',
+            'scripts/memory-harness.mjs',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -39,6 +43,25 @@ export default defineConfig(
       // without adding safety.
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/prefer-readonly': 'off',
+    },
+  },
+  {
+    // Plain-JS scripts run under Node; they are not type-checked source.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        URL: 'readonly',
+        clearTimeout: 'readonly',
+        console: 'readonly',
+        globalThis: 'readonly',
+        process: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
     },
   },
   {

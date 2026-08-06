@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GlyphCull rendering harness</title>
+  </head>
+  <body>
+    <p>Rendering validation: WebGL and Canvas 2D against the CPU reference rasterizer.</p>
+    <script type="module">
+      // The rendering-validation harness (TESTING.md §2 rendering): paints the
+      // golden package with each renderer, then compares the GPU framebuffer
+      // against a CPU compositing reference built from the same draw list and
+      // the shared MSDF reconstruction (`dist/render/msdf.js`). Tolerance
+      // policy: mean absolute error ≤ 1/64 per channel over the drawn pixels
+      // (coverage-aware — background pixels are excluded), per Architecture.md
+      // §3.7 / TESTING.md §2.
+      import { load } from '/dist/index.js';
+      import { readPackage } from '/dist/format/reader.js';
+      import { buildDocument } from '/dist/document/model.js';
+      import { LayoutEngine } from '/dist/layout/layout.js';
+      import { computeVisibleSet } from '/dist/visibility/visibility.js';
+      import { DrawListBuilder } from '/dist/render/drawlist.js';
+      import { prepareGlyph } from '/dist/glyphs/cache.js';
+      import { reconstruct, coverageAt } from '/dist/render/msdf.js';
+      import { rgbaComponents } from '/dist/render/adapter.js';
+
+      window.__glyphcullValidation = { state: 'running' };
+
+      const WIDTH = 800;
+      const HEIGHT = 600;
+      const MARGIN = 120;
+      const VIEWPORT = { x: 0, y: 0, w: WIDTH, h: HEIGHT };
+
+      async function main() {
+        const bytes = new Uint8Array(
+          await (await fetch('/fixtures/pipeline-golden.cull')).arrayBuffer(),
+        );
+        const results = {};
+        for (const renderer of ['webgl', 'canvas2d']) {
+          try {
+            results[renderer] = await validateRenderer(bytes, renderer);
+          } catch (error) {
+            results[renderer] = { ok: false, error: String(error) };
+          }
+        }
+        window.__glyphcullValidation = { state: 'done', results };
+      }
+
+      async function validateRenderer(bytes, renderer) {
+        console.log('harness: validating', renderer);
+        // The reference pipeline: the same inputs the runtime receives.
+        const parsed = await readPackage(bytes);
+        if (!parsed.ok) throw parsed.error;
+        const model = buildDocument(parsed.value);
+        if (!model.ok) throw model.error;
+        const engine = new LayoutEngine(model.value, { dpr: 1, contentWidth: WIDTH });
+        engine.extendTo(VIEWPORT.y + VIEWPORT.h + MARGIN);
+        const result = computeVisibleSet(model.value, engine, VIEWPORT, MARGIN);
+        const stamps = (chunkId, glyph) => {
+          void chunkId;
+          const atlas = model.value.atlases[glyph.atlasId];
+          return atlas === undefined
+            ? undefined
+            : prepareGlyph(atlas, glyph.codepoint, glyph.fontSizePx, glyph.color);
+        };
+        const resolver = {
+          atlasPage: (atlasId, pageIndex) => atlasId * 100 + pageIndex,
+          image: (imageId) => 2000 + imageId,
+        };
+        const list = new DrawListBuilder({ texture: resolver }).build(
+          engine,
+          result.visible,
+          stamps,
+          [],
+        );
+
+        // The runtime paints the same document on a fresh canvas.
+        const canvas = document.createElement('canvas');
+        canvas.width = WIDTH;
+        canvas.height = HEIGHT;
+        document.body.appendChild(canvas);
+        const doc = await load(bytes, {
+          canvas,
+          contentWidth: WIDTH,
+          width: WIDTH,
+          height: HEIGHT,
+          dpr: 1,
+          margin: MARGIN,
+          renderer,
+        });
+        doc.scroll(VIEWPORT, 1);
+        doc.paint();
+        console.log('harness:', renderer, 'painted');
+
+        // The reference image: composite every glyph quad's reconstruction in
+        // draw order with the same premultiplied source-over blend the GL uses
+        // (ONE, ONE_MINUS_SRC_ALPHA), over a transparent clear.
+        const reference = compositeReference(model.value, list);
+
+        const stats = compare(readPixels(canvas, renderer), reference);
+        console.log('harness:', renderer, 'mean', stats.meanAbs.toFixed(5), 'pixels', stats.pixels);
+
+        // WebGL context-loss recovery: lose + restore, repaint, and verify the
+        // framebuffer matches again (textures re-upload from the source).
+        if (renderer === 'webgl') {
+          stats.restoreOk = await exerciseContextLoss(canvas, doc, reference);
+          console.log('harness: webgl restore ok =', stats.restoreOk);
+        }
+
+        doc.destroy();
+        canvas.remove();
+        return {
+          ok: stats.meanAbs <= 1 / 64,
+          renderer,
+          quads: stats.quads,
+          pixels: stats.pixels,
+          meanAbs: stats.meanAbs,
+          worst: stats.worst,
+          limit: 1 / 64,
+          restoreOk: stats.restoreOk,
+        };
+      }
+
+      /** Lose + restore the WebGL context, repaint, and re-verify the pixels. */
+      async function exerciseContextLoss(canvas, doc, reference) {
+        const gl = canvas.getContext('webgl');
+        const lose = gl.getExtension('WEBGL_lose_context');
+        if (lose === null) return undefined; // extension unavailable: skip
+        const timed = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const lost = new Promise((resolve) => {
+          canvas.addEventListener('webglcontextlost', () => resolve(), { once: true });
+          lose.loseContext();
+          timed(2000).then(() => resolve()); // safety: never hang the harness
+        });
+        await lost;
+        // Chromium requires the lost-event dispatch to settle before
+        // restoration is allowed; give it a tick.
+        await timed(50);
+        const restored = new Promise((resolve) => {
+          canvas.addEventListener('webglcontextrestored', () => resolve(true), { once: true });
+          lose.restoreContext();
+          timed(2000).then(() => resolve(false));
+        });
+        const didRestore = await restored;
+        if (!didRestore) return false;
+        doc.paint();
+        const after = compare(readPixels(canvas, 'webgl'), reference);
+        return after.meanAbs <= 1 / 64;
+      }
+
+      /** Composite the draw list's glyphs into a premultiplied Float32 buffer. */
+      function compositeReference(model, list) {
+        const buffer = new Float32Array(WIDTH * HEIGHT * 4);
+        let quads = 0;
+        for (const command of list.commands) {
+          if (command.type !== 'glyph') continue;
+          const atlas = model.atlases[Math.floor(command.texture / 100)];
+          if (atlas === undefined) continue;
+          const page = atlas.pages[command.texture % 100];
+          if (page === undefined) continue;
+          const [u0, v0, u1, v1] = command.uv;
+          const boxX = u0 * atlas.pageWidth;
+          const boxY = v0 * atlas.pageHeight;
+          const boxW = (u1 - u0) * atlas.pageWidth;
+          const boxH = (v1 - v0) * atlas.pageHeight;
+          const outW = Math.max(1, Math.round(command.w));
+          const outH = Math.max(1, Math.round(command.h));
+          const [r, g, b, a] = rgbaComponents(command.color);
+          const x0 = Math.round(command.x);
+          const y0 = Math.round(command.y);
+          for (let oy = 0; oy < outH; oy++) {
+            for (let ox = 0; ox < outW; ox++) {
+              const dx = x0 + ox;
+              const dy = y0 + oy;
+              if (dx < 0 || dy < 0 || dx >= WIDTH || dy >= HEIGHT) continue;
+              // Sample at the fragment center the renderer uses: the affine
+              // UV mapping evaluated at device pixel center (dx + 0.5, dy + 0.5),
+              // in the shared pixel-center texel convention (texel k at k).
+              const tx = boxX + ((dx + 0.5 - command.x) * boxW) / command.w;
+              const ty = boxY + ((dy + 0.5 - command.y) * boxH) / command.h;
+              const c = coverageAt(page, atlas.pageWidth, tx, ty, command.pxPerTexel);
+              const srcR = r * c;
+              const srcG = g * c;
+              const srcB = b * c;
+              const srcA = a * c;
+              const i = (dy * WIDTH + dx) * 4;
+              // Premultiplied source-over (the GL blend).
+              buffer[i] = srcR + buffer[i] * (1 - srcA);
+              buffer[i + 1] = srcG + buffer[i + 1] * (1 - srcA);
+              buffer[i + 2] = srcB + buffer[i + 2] * (1 - srcA);
+              buffer[i + 3] = srcA + buffer[i + 3] * (1 - srcA);
+            }
+          }
+          quads++;
+        }
+        return { buffer, quads };
+      }
+
+      /** Read the canvas back (WebGL rows are bottom-up; flip to top-down). */
+      function readPixels(canvas, renderer) {
+        if (renderer === 'webgl') {
+          const gl = canvas.getContext('webgl');
+          const pixels = new Uint8Array(WIDTH * HEIGHT * 4);
+          gl.readPixels(0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          return (x, y) => {
+            const i = ((HEIGHT - 1 - y) * WIDTH + x) * 4;
+            return [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]];
+          };
+        }
+        const data = canvas.getContext('2d').getImageData(0, 0, WIDTH, HEIGHT).data;
+        return (x, y) => {
+          const i = (y * WIDTH + x) * 4;
+          const a = data[i + 3] / 255;
+          // getImageData returns straight (non-premultiplied) values; the
+          // comparison is in premultiplied space, so premultiply here.
+          return [data[i] * a, data[i + 1] * a, data[i + 2] * a, data[i + 3]];
+        };
+      }
+
+      /** Mean absolute error over the drawn (non-transparent) pixels. */
+      function compare(read, reference) {
+        let sum = 0;
+        let pixels = 0;
+        let worst = 0;
+        for (let y = 0; y < HEIGHT; y++) {
+          for (let x = 0; x < WIDTH; x++) {
+            const i = (y * WIDTH + x) * 4;
+            const refA = reference.buffer[i + 3];
+            // Coverage-aware: background pixels are not compared.
+            if (refA <= 0.01) continue;
+            const px = read(x, y);
+            const err =
+              (Math.abs(px[0] - reference.buffer[i] * 255) +
+                Math.abs(px[1] - reference.buffer[i + 1] * 255) +
+                Math.abs(px[2] - reference.buffer[i + 2] * 255) +
+                Math.abs(px[3] - refA * 255)) /
+              4 /
+              255;
+            sum += err;
+            pixels++;
+            if (err > worst) worst = err;
+          }
+        }
+        return {
+          meanAbs: pixels === 0 ? Infinity : sum / pixels,
+          pixels,
+          worst,
+          quads: reference.quads,
+        };
+      }
+
+      main();
+    </script>
+  </body>
+</html>

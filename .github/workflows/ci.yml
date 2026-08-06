@@ -17,11 +17,13 @@ jobs:
       - run: npm ci
       - name: Format + lint + typecheck
         run: npm run check
-      - name: Unit / integration / property
+      - name: Unit / integration / property / stress
         run: npm test
       - name: Memory harness
         run: npm run test:memory
       - name: Bench smoke
-        run: npm run bench -- --smoke
+        run: npm run bench:smoke
+      - name: Browser rendering validation
+        run: npx playwright install --with-deps chromium && npm run test:browser
       - name: Doc build
         run: npm run docs:build
