@@ -6,25 +6,31 @@ exist).
 
 ## Phase 3 — JavaScript runtime (as sequenced in the master plan)
 
-- [ ] **3.1 format/**: independent `.cull` reader per SPEC.md; validation; SEAL verification;
+**Status: complete.** All ten subsystems shipped; the test pyramid, browser
+rendering validation, and CI are green. Rendering validation established the
+shared pixel-center sampling convention (WebGL shifts glyph UVs half a texel;
+Canvas 2D rasterizes phase-exact bitmaps) and the premultiplied comparison
+space — see Architecture.md §3.7 and TESTING.md §2.
+
+- [x] **3.1 format/**: independent `.cull` reader per SPEC.md; validation; SEAL verification;
       malformed corpus + truncation tests; contract tests against compiler golden fixtures.
-- [ ] **3.2 document/**: Document model; load-time validation; multi-document coexistence.
-- [ ] **3.3 lifecycle/**: chunk lifecycle state machine; guarded transitions; transition log;
+- [x] **3.2 document/**: Document model; load-time validation; multi-document coexistence.
+- [x] **3.3 lifecycle/**: chunk lifecycle state machine; guarded transitions; transition log;
       property tests; injected clock.
-- [ ] **3.4 visibility/**: viewport culling + semantic culling; visible-set determinism tests.
-- [ ] **3.5 materialize/**: priority queue; time/memory budgets; cooperative scheduling;
+- [x] **3.4 visibility/**: viewport culling + semantic culling; visible-set determinism tests.
+- [x] **3.5 materialize/**: priority queue; time/memory budgets; cooperative scheduling;
       eviction with cooling period; starvation tests.
-- [ ] **3.6 layout/**: UAX #29 word boundaries; KP line breaking; block layout; tables
+- [x] **3.6 layout/**: UAX #29 word boundaries; KP line breaking; block layout; tables
       (colspan/rowspan); images; deterministic layout tests + golden layout fixtures.
-- [ ] **3.7 glyphs/**: glyph cache; budget enforcement; cache/eviction coupling tests.
-- [ ] **3.8 render/**: draw list builder; WebGL MSDF renderer; Canvas 2D fallback; context
+- [x] **3.7 glyphs/**: glyph cache; budget enforcement; cache/eviction coupling tests.
+- [x] **3.8 render/**: draw list builder; WebGL MSDF renderer; Canvas 2D fallback; context
       loss recovery; rendering validation vs reference rasterizer.
-- [ ] **3.9 selection/**: hit testing; ranges; highlight quads; copy extraction policy tests.
-- [ ] **3.10 api/**: exactly `load/scroll/paint/select/copy/destroy`; misuse tests (destroyed
+- [x] **3.9 selection/**: hit testing; ranges; highlight quads; copy extraction policy tests.
+- [x] **3.10 api/**: exactly `load/scroll/paint/select/copy/destroy`; misuse tests (destroyed
       handle, concurrent loads); TypeScript declarations; API documentation.
-- [ ] **Test pyramid complete**: unit, integration, property, stress, memory regression,
+- [x] **Test pyramid complete**: unit, integration, property, stress, memory regression,
       performance regression; CI green.
-- [ ] **Documentation complete**: Architecture.md/DESIGN.md updated; state machine and data
+- [x] **Documentation complete**: Architecture.md/DESIGN.md updated; state machine and data
       flow diagrams; public API docs.
 
 ## Definition of done (every phase)

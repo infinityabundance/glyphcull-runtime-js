@@ -1,7 +1,8 @@
 # Design — glyphcull-runtime-js
 
-Status: Phase 3 in progress — 3.1–3.8 landed; decisions recorded with rationale,
-alternatives, tradeoffs.
+Status: Phase 3 complete — decisions recorded with rationale, alternatives,
+tradeoffs (D7 shaping scope, D9 logical selection, D10 determinism, D11
+budgets, D12 the six-operation API).
 The Rust runtime mirrors these decisions; cross-references are noted where they differ.
 
 ## D1. TypeScript, zero runtime dependencies

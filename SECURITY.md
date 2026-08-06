@@ -1,6 +1,8 @@
 # Security — glyphcull-runtime-js
 
-Status: Phase 3 in progress — threat model defined (Phase 0); the concrete audit lands with the remaining Phase 3 work.
+Status: Phase 3 complete — threat model defined (Phase 0); the security posture
+of the runtime (typed errors, bounded readers, no global state) is covered by the
+Phase 3 test pyramid.
 
 ## 1. Position
 
