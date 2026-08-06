@@ -1,6 +1,6 @@
 # Golden
 
-Deterministic _golden_ **fixture** with a [link](https://example.com).
+Deterministic *golden* **fixture** with a [link](https://example.com).
 
 - one
 - two

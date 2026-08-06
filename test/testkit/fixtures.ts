@@ -41,7 +41,7 @@ export const goldenCss = 'p { color: #336699; }\n';
  * carry their text).
  */
 export const pipelineGoldenExpected = {
-  documentId: 'f57f294d46f2a0bc309002ad9ebe60f2',
+  documentId: '928da088ece3776622d6f104756a5e35',
   sourceDigest: '47869ba2d830d7e8599b594a98b1e446f79f85a474f8760f22eb99ba0afc70f9',
   generator: 'glyphcull-compiler',
   chunkCount: 22,
@@ -53,7 +53,7 @@ export const pipelineGoldenExpected = {
   sectionKinds: [1, 2, 3, 4, 5, 7],
   /** (font_id, weight, italic, glyphs, kerning, pageWidth, pages) per atlas. */
   atlases: [
-    { fontId: 0, weight: 400, italic: false, glyphs: 21, kerning: 12, pageWidth: 256, pages: 2 },
+    { fontId: 0, weight: 400, italic: false, glyphs: 22, kerning: 12, pageWidth: 256, pages: 2 },
     { fontId: 1, weight: 400, italic: true, glyphs: 6, kerning: 0, pageWidth: 128, pages: 1 },
     { fontId: 2, weight: 700, italic: false, glyphs: 12, kerning: 8, pageWidth: 256, pages: 1 },
   ],
