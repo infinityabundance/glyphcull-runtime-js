@@ -1,6 +1,7 @@
 # Design — glyphcull-runtime-js
 
-Status: Phase 0 (foundations). Decisions recorded with rationale, alternatives, tradeoffs.
+Status: Phase 3 in progress — 3.1–3.8 landed; decisions recorded with rationale,
+alternatives, tradeoffs.
 The Rust runtime mirrors these decisions; cross-references are noted where they differ.
 
 ## D1. TypeScript, zero runtime dependencies

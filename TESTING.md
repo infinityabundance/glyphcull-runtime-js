@@ -1,7 +1,6 @@
 # Testing — glyphcull-runtime-js
 
-Status: Phase 0 (foundations). The pyramid below is the target for Phase 3; every slice
-lands with its subsystem.
+Status: Phase 3 in progress — 3.1–3.8 landed with their test slices; the pyramid below is the target for the remaining Phase 3 work.
 
 ## 1. Principles
 

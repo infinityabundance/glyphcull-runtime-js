@@ -1,6 +1,6 @@
 # Performance — glyphcull-runtime-js
 
-Status: Phase 0 (foundations). Budgets are declared; measurement lands in Phase 3. GlyphCull
+Status: Phase 3 in progress — 3.1–3.8 landed; the benchmark suite and memory harness land with the remaining Phase 3 work. GlyphCull
 never prematurely optimizes: deterministic architecture first, then profile, measure,
 optimize on evidence.
 

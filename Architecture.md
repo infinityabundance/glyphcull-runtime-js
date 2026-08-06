@@ -1,6 +1,9 @@
 # Architecture — glyphcull-runtime-js
 
-Status: Phase 0 (foundations). Living document; updated as each subsystem lands.
+Status: Phase 3 in progress — subsystems 3.1–3.8 landed (format, document,
+lifecycle, visibility, materialize, layout, glyphs, render); 3.9 selection and
+3.10 api pending, then the test pyramid and CI. Living document; updated as
+each subsystem lands.
 The Rust runtime (`glyphcull-runtime-rs`) mirrors this architecture exactly — only
 implementation changes.
 
