@@ -20,7 +20,7 @@ import type { Atlas, ChunkRecord, ResolvedStyle } from '../format/sections.js';
 import { ChunkKind, ExtraKind, ListStyle } from '../format/sections.js';
 import type { Rect } from '../visibility/visibility.js';
 import type { GeometrySource } from '../visibility/visibility.js';
-import { atlasMetrics, measureRun } from './measure.js';
+import { atlasMetrics, lineStartShift, measureRun } from './measure.js';
 import type { GlyphMetric } from './measure.js';
 import { BreakClass, tokenizeForBreaking } from './breaks.js';
 import { lineBreak } from './kp.js';
@@ -467,7 +467,30 @@ export class LayoutEngine implements GeometrySource {
     const baseline = lineTop + this.baselineOffset(blockStyle);
     const runs: RunLayout[] = [];
     const glyphs: GlyphInstance[] = [];
-    let cursorX = lineX;
+    // Phase G (line-start ink guard): the first glyph's ink must not start
+    // left of the line origin — a negative left side bearing would paint ink
+    // outside the viewport at a line start. Shift the line start right by the
+    // overhang plus one document pixel of anti-aliasing margin. Deterministic:
+    // computed from the first atlas-bearing token's first glyph (bearing,
+    // scale, and the MSDF AA edge all enter through bearingX·fontSizePx).
+    let lineShift = 0;
+    let guardIndex = 0;
+    for (const token of tokens) {
+      if (guardIndex < br.start) {
+        guardIndex++;
+        continue;
+      }
+      if (guardIndex > br.end) break;
+      const atlas = this.atlasFor(token.style);
+      if (atlas === undefined) continue;
+      const probe = measureRun(atlas, token.text, token.fontSizePx, token.style.letterSpacing);
+      const first = probe.glyphs[0];
+      if (first !== undefined && !first.isMark && first.glyph !== undefined) {
+        lineShift = lineStartShift(first.glyph.bearingX, token.fontSizePx);
+      }
+      break;
+    }
+    let cursorX = lineX + lineShift;
     let tokenIndex = 0;
     for (const token of tokens) {
       if (tokenIndex < br.start) {

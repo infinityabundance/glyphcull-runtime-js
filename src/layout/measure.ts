@@ -35,6 +35,18 @@ export interface MeasuredRun {
 }
 
 /**
+ * Phase G (line-start ink guard): the shift needed so a line's first glyph
+ * ink is not clipped at the line origin. A negative left side bearing paints
+ * ink left of the pen; the shift is the overhang plus one document pixel of
+ * anti-aliasing margin (the MSDF AA edge). Positive/zero bearings need no
+ * shift. Deterministic: a pure function of the glyph's bearing and size.
+ */
+export function lineStartShift(bearingX: number, fontSizePx: number): number {
+  const inkLeft = bearingX * fontSizePx;
+  return inkLeft < 0 ? -inkLeft + 1 : 0;
+}
+
+/**
  * Measure a text run against an atlas at a font size. `letterSpacingPx` is
  * added after every non-mark glyph (SPEC.md §2.3, tag 15).
  */

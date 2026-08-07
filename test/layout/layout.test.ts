@@ -6,6 +6,7 @@ import { buildDocument } from '../../src/document/model.js';
 import { readPackage } from '../../src/format/reader.js';
 import { ChunkKind, ListStyle } from '../../src/format/sections.js';
 import { LayoutEngine, listMarkerText } from '../../src/layout/layout.js';
+import { lineStartShift } from '../../src/layout/measure.js';
 import { pipelineGolden } from '../testkit/fixtures.js';
 
 async function goldenEngine(opts: { contentWidth?: number } = {}) {
@@ -63,6 +64,33 @@ describe('LayoutEngine', () => {
     // The heading text is 'Golden'.
     const text = heading!.lines[0]!.runs.map((r) => r.text).join('');
     expect(text).toBe('Golden');
+  });
+
+  it('Phase G: the first glyph of the first line starts inside the viewport', async () => {
+    const engine = await goldenEngine();
+    engine.extendTo(Number.POSITIVE_INFINITY);
+    const firstRecord = [...engine.recordsAll().values()]
+      .filter((r) => r.lines.length > 0)
+      .sort((a, b) => a.y - b.y)[0]!;
+    const firstLine = firstRecord.lines[0]!;
+    expect(firstLine.glyphs.length).toBeGreaterThan(0);
+    const first = firstLine.glyphs[0]!;
+    // The glyph pen (advance origin) is at or right of the line origin.
+    expect(first.x).toBeGreaterThanOrEqual(0);
+    // The ink (bearing applied) is inside the viewport: never clipped left.
+    expect(first.x).toBeLessThan(100);
+  });
+
+  it('Phase G: lineStartShift guards negative left bearings and ignores positive ones', () => {
+    // Positive / zero bearings: no shift (the ink starts at or right of the pen).
+    expect(lineStartShift(0.05, 192)).toBe(0);
+    expect(lineStartShift(0, 192)).toBe(0);
+    // Negative bearing: the ink would start left of the pen; the shift is the
+    // overhang plus one document pixel of anti-aliasing margin.
+    expect(lineStartShift(-0.1, 192)).toBeCloseTo(0.1 * 192 + 1, 6);
+    expect(lineStartShift(-0.05, 96)).toBeCloseTo(0.05 * 96 + 1, 6);
+    // Scale dependence: the overhang grows with the font size.
+    expect(lineStartShift(-0.1, 384)).toBeGreaterThan(lineStartShift(-0.1, 192));
   });
 
   it('frontier: extendTo lays out only the blocks needed to cover the viewport', async () => {

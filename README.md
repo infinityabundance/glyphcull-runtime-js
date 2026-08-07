@@ -112,6 +112,22 @@ src/
 tests/            — unit, integration, property, stress, memory, perf regression
 ```
 
+## Rendering convention (normative)
+
+MSDF decoding follows the canonical sign convention (SPEC.md §2.5, GLOSSARY:
+"MSDF sign convention"), identical in the WebGL shader, the Canvas 2D fallback,
+and the CPU reference reconstruction (`src/render/msdf.ts`):
+
+```text
+MSDF channel value < 0.5  = outside glyph
+MSDF channel value == 0.5 = glyph edge
+MSDF channel value > 0.5  = inside glyph
+```
+
+Coverage = smoothstep of `(median(r, g, b) − 0.5) × texelToPx` (positive = inside,
+1 device-px edge). The renderer never inverts this to compensate for an atlas;
+a non-conforming atlas is a bug in the atlas, not a case for a renderer workaround.
+
 ## Principles
 
 - **Culling never materializes; materialization never culls.** Responsibilities never merge.
