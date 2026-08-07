@@ -16,6 +16,14 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Changed (fixture refresh + CI hardening)
+
+- Contract fixtures refreshed from the compiler: `pipeline-golden.cull` follows the
+  glyph-packer correctness fix (face 0 packs onto one page instead of two; the pinned
+  `documentId` and atlas pages in `test/testkit/fixtures.ts` updated accordingly).
+- CI now also runs the explicit build, the fixture-load + public-API-surface step
+  (`vitest run test/api`), and `npm pack --dry-run`; the README carries the CI badge.
+
 ### Added (Phase 0 — Foundations)
 
 - Repository scaffolding: README, Architecture.md, DESIGN.md, ROADMAP.md, TESTING.md,

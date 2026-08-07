@@ -36,6 +36,23 @@ this file; reviewers enforce them.
 4. Update documentation in the same change.
 5. Open a PR with change description, evidence (measurements/diffs), and doc delta.
 
+### CI
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs the full gate from a clean
+checkout on every push to `main` and every pull request:
+
+- `npm ci` then `npm run build` (the shipped TypeScript build)
+- `npm run check` (prettier + eslint + `tsc --noEmit`)
+- `npx vitest run test/api` — the committed fixture loads and the public surface is exactly
+  `load`/`scroll`/`paint`/`select`/`copy`/`destroy` (+ the typed errors)
+- `npm test` (unit, integration, property, stress)
+- `npm run test:memory`, `npm run bench:smoke`
+- `npm pack --dry-run` (the npm tarball assembles from the allowlisted `dist/`)
+- `npx playwright install --with-deps chromium && npm run test:browser` (real pixels)
+- `npm run docs:build`
+
+CI is the release gate: a package is published only from a green tree.
+
 ## 4. Review requirements
 
 - Behavior changes include before/after evidence.

@@ -15,14 +15,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Build (TypeScript)
+        run: npm run build
       - name: Format + lint + typecheck
         run: npm run check
+      - name: Fixture load + public API surface (load/scroll/paint/select/copy/destroy)
+        run: npx vitest run test/api
       - name: Unit / integration / property / stress
         run: npm test
       - name: Memory harness
         run: npm run test:memory
       - name: Bench smoke
         run: npm run bench:smoke
+      - name: Pack dry-run (the npm tarball assembles)
+        run: npm pack --dry-run
       - name: Browser rendering validation
         run: npx playwright install --with-deps chromium && npm run test:browser
       - name: Doc build

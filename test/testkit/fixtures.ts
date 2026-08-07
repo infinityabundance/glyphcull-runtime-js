@@ -38,10 +38,12 @@ export const goldenCss = 'p { color: #336699; }\n';
  * NOTE: the fixture tracks the compiler's golden, which changed in the
  * compiler commit "Fix chunk partition dropping list-item, code-block, and
  * cell text" (22 chunks / 12 content: tight-list items and code blocks now
- * carry their text).
+ * carry their text) and again in the hardening pass (the glyph-packer
+ * correctness fix: face 0 packs onto one page instead of two; document_id
+ * follows the atlas bytes).
  */
 export const pipelineGoldenExpected = {
-  documentId: '928da088ece3776622d6f104756a5e35',
+  documentId: '18b1369fe28b413935bc0238da6ca50b',
   sourceDigest: '47869ba2d830d7e8599b594a98b1e446f79f85a474f8760f22eb99ba0afc70f9',
   generator: 'glyphcull-compiler',
   chunkCount: 22,
@@ -53,7 +55,7 @@ export const pipelineGoldenExpected = {
   sectionKinds: [1, 2, 3, 4, 5, 7],
   /** (font_id, weight, italic, glyphs, kerning, pageWidth, pages) per atlas. */
   atlases: [
-    { fontId: 0, weight: 400, italic: false, glyphs: 22, kerning: 12, pageWidth: 256, pages: 2 },
+    { fontId: 0, weight: 400, italic: false, glyphs: 22, kerning: 12, pageWidth: 256, pages: 1 },
     { fontId: 1, weight: 400, italic: true, glyphs: 6, kerning: 0, pageWidth: 128, pages: 1 },
     { fontId: 2, weight: 700, italic: false, glyphs: 12, kerning: 8, pageWidth: 256, pages: 1 },
   ],

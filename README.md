@@ -1,5 +1,7 @@
 # glyphcull-runtime-js
 
+[![CI](https://github.com/infinityabundance/glyphcull-runtime-js/actions/workflows/ci.yml/badge.svg)](https://github.com/infinityabundance/glyphcull-runtime-js/actions/workflows/ci.yml)
+
 The JavaScript GlyphCull runtime. Consumes compiled `.cull` packages and paints them on
 Canvas 2D / WebGL. This runtime proves the architecture works in today's browsers.
 
