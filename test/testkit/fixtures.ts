@@ -43,7 +43,7 @@ export const goldenCss = 'p { color: #336699; }\n';
  * follows the atlas bytes).
  */
 export const pipelineGoldenExpected = {
-  documentId: '18b1369fe28b413935bc0238da6ca50b',
+  documentId: '19aa2542367bb9a3bba587bc3038805b',
   sourceDigest: '47869ba2d830d7e8599b594a98b1e446f79f85a474f8760f22eb99ba0afc70f9',
   generator: 'glyphcull-compiler',
   chunkCount: 22,
