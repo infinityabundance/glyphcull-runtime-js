@@ -2,6 +2,17 @@
 
 All notable changes, reverse chronological. Keep a Changelog format; Semantic Versioning.
 
+## [0.1.0] — 2026-08-07
+
+### Added (first npm release — prepared, pending registry auth)
+
+- npm artifact prepared for `glyphcull-runtime-js@0.1.0`: ESM (`dist/`, built by `npm run
+  build`/`prepack`) with bundled TypeScript declarations, `sideEffects: false` for
+  bundlers, the six-operation public surface (`load`/`scroll`/`paint`/`select`/`copy`/
+  `destroy`) plus the typed errors, and the documented `LoadOptions`. The package ships
+  only `dist/`; the repository remains the source of truth. Publishing requires an
+  authenticated npm token (`npm publish`).
+
 ## [Unreleased]
 
 ### Added (Phase 0 — Foundations)

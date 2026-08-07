@@ -45,3 +45,12 @@ space — see Architecture.md §3.7 and TESTING.md §2.
 - Worker-thread materialization (needs scheduler contract extension).
 - Complex-script shaping and bidi (depends on compiler-side text scope extension).
 - Search index consumption (IDXM section, compiler-side).
+
+## Release status
+
+- **npm artifact prepared** (2026-08-07): the package metadata (`repository`, `keywords`,
+  `sideEffects: false`, `prepack` build) and consumption docs are in place; the tarball
+  is verified (`npm pack` + install + import smoke). Publishing to npm requires an
+  authenticated npm token (`npm login` / `NPM_TOKEN`) — one command: `npm publish`. The
+  demo and harnesses continue to consume the repository checkout via
+  `build-siblings.sh`; the npm artifact is for external hosts.

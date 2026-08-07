@@ -4,6 +4,21 @@
   "description": "The GlyphCull JavaScript document runtime: a compiled-document host for .cull packages (load/scroll/paint/select/copy/destroy).",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/infinityabundance/glyphcull-runtime-js.git"
+  },
+  "keywords": [
+    "document",
+    "gpu",
+    "runtime",
+    "compiled",
+    "renderer",
+    "msdf",
+    "canvas",
+    "webgl"
+  ],
+  "sideEffects": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -20,6 +35,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "check": "npm run fmt:check && npm run lint && npm run typecheck",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",

@@ -45,6 +45,42 @@ destroy() — release every resource
 
 Everything else is internal. The format contract is `glyphcull-compiler/docs/format/SPEC.md`.
 
+## Install
+
+```sh
+npm install glyphcull-runtime-js
+```
+
+ESM with bundled TypeScript declarations:
+
+```ts
+import { load, RuntimeError } from 'glyphcull-runtime-js';
+
+const doc = await load(cullBytes, {
+  canvas,              // HTMLCanvasElement (WebGL, with Canvas 2D fallback)
+  dpr: window.devicePixelRatio,
+  width: 800,
+  height: 600,
+  contentWidth: 800,
+  margin: 120,
+  glyphBudgetBytes: 16 * 1024 * 1024,
+  frameBudgetMs: 8,
+  coolingPeriodMs: 1500,
+});
+doc.scroll({ x: 0, y: 400, w: 800, h: 600 });
+doc.paint();
+try {
+  doc.select({ x: 10, y: 40 }, { x: 200, y: 40 });
+  const text = doc.copy();
+} catch (error) {
+  if (error instanceof RuntimeError) console.error(error.kind);
+}
+doc.destroy();
+```
+
+The package ships only the compiled `dist/` (built from `src/` by `npm run build`); the
+repository remains the source of truth for tests and the demo harnesses.
+
 ## Package layout
 
 ```
