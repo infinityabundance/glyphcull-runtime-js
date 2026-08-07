@@ -29,6 +29,8 @@ jobs:
         run: npm run bench:smoke
       - name: Pack dry-run (the npm tarball assembles)
         run: npm pack --dry-run
+      - name: Release receipts (schema, git, source-hash honesty, completeness)
+        run: release/scripts/check-release-receipts.sh --fast
       - name: Browser rendering validation
         run: npx playwright install --with-deps chromium && npm run test:browser
       - name: Doc build

@@ -1,0 +1,29 @@
+{
+  "project": "glyphcull",
+  "repository": "https://github.com/infinityabundance/glyphcull-runtime-js.git",
+  "package": "glyphcull-runtime-js",
+  "version": "0.1.0",
+  "git_commit": "0000000000000000000000000000000000000000",
+  "git_tree_clean": true,
+  "source_archive_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "package_archive_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "toolchain": {
+    "rust": "",
+    "cargo": "",
+    "node": "v22.0.0",
+    "npm": "10.0.0"
+  },
+  "commands": {
+    "build": "npm run build",
+    "test": "npm test",
+    "conformance": "npx vitest run test/format (JS reader) + (glyphcull-demo) ./scripts/run-conformance.sh",
+    "package_dry_run": "npm pack --dry-run"
+  },
+  "results": {
+    "build": "pass",
+    "test": "pass",
+    "conformance": "pass",
+    "package_dry_run": "pass"
+  },
+  "release_timestamp": "2026-08-07T00:00:00Z"
+}

@@ -2,6 +2,21 @@
 
 All notable changes, reverse chronological. Keep a Changelog format; Semantic Versioning.
 
+## [Unreleased]
+
+### Added (release receipts, hardening pass H7)
+
+- `release/` — the receipt system: schema template, `generate-release-receipt.sh`
+  (records commit, deterministic source-tree hash, the real `npm pack` tarball hash,
+  toolchain, commands, results, UTC timestamp), `check-release-receipts.sh`
+  (`--fast` CI gate; `--full` recomputes the tarball hash from a git worktree of the
+  recorded commit — the worktree runs `npm ci` so `prepack` builds the same `dist/`),
+  and `release-dry-run.sh`.
+- `release/receipts/` — the committed receipt for `glyphcull-runtime-js@0.1.0` with
+  build/test/conformance/package gates recorded as pass (full gates re-run at
+  generation).
+- CI: the `gate` job runs `release/scripts/check-release-receipts.sh --fast`.
+
 ## [0.1.0] — 2026-08-07
 
 ### Added (first npm release)
