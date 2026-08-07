@@ -9,3 +9,6 @@ docs/api/
 .vscode/
 playwright-report/
 test-results/
+
+# Scratch build/verification artifacts (npm pack smoke, sibling output).
+build/
