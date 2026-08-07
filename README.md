@@ -2,8 +2,17 @@
 
 [![CI](https://github.com/infinityabundance/glyphcull-runtime-js/actions/workflows/ci.yml/badge.svg)](https://github.com/infinityabundance/glyphcull-runtime-js/actions/workflows/ci.yml)
 
+**A compiled GPU document runtime.**
+
 The JavaScript GlyphCull runtime. Consumes compiled `.cull` packages and paints them on
 Canvas 2D / WebGL. This runtime proves the architecture works in today's browsers.
+
+> **Status: v0.1 experimental infrastructure prototype.** GlyphCull currently supports
+> Latin-script, per-codepoint text rendering for MVP validation. It is not yet a production
+> typography engine for complex shaping, bidirectional text, vertical text, Indic scripts,
+> Arabic shaping, or full international publishing. GlyphCull is not DRM and does not make
+> scraping impossible; it raises the cost of ordinary DOM-based extraction by replacing HTML
+> text nodes with a compiled, streamed, GPU-rendered document runtime (see SECURITY.md).
 
 ```
 Compiled Document (.cull)
@@ -45,7 +54,10 @@ copy()    — extract the selection as plain text
 destroy() — release every resource
 ```
 
-Everything else is internal. The format contract is `glyphcull-compiler/docs/format/SPEC.md`.
+Everything else is internal. The format contract is `glyphcull-compiler/docs/format/SPEC.md`, and
+the canonical cross-reader **conformance suite** (`glyphcull-demo/conformance/`) proves this
+reader, the compiler reference, and the Rust runtime reader agree on every valid fixture and
+reject every hostile entry consistently.
 
 ## Install
 

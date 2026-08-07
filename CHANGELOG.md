@@ -16,6 +16,14 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Changed (README status correction, hardening pass H4)
+
+- The README now leads with the tagline **"A compiled GPU document runtime."** and a
+  status block: v0.1 experimental infrastructure prototype; Latin-script per-codepoint
+  rendering only (complex shaping, bidi, vertical text, Indic/Arabic scripts, and full
+  international publishing are documented exclusions); not DRM; does not make scraping
+  impossible. Added the CI badge and the conformance-suite link.
+
 ### Changed (fixture refresh + CI hardening)
 
 - Contract fixtures refreshed from the compiler: `pipeline-golden.cull` follows the
