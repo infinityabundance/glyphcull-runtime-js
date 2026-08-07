@@ -404,6 +404,41 @@ describe('unknown sections and structural strictness', () => {
     if (!r.ok) expect(r.error.kind).toBe('invalid-flags');
   });
 
+  it('rejects a critical unknown section kind and skips a noncritical one', async () => {
+    // Noncritical (flags bit 0 clear): skipped, forward compatible.
+    const bytes = buildPackage([
+      { kind: 1, compression: 1, payload: infoPayload() },
+      { kind: 99, compression: 0, payload: new TextEncoder().encode('future') },
+    ]);
+    const ok = await readPackage(bytes);
+    expect(ok.ok).toBe(true);
+    // Critical (flags bit 0 set on the unknown entry): rejected.
+    const critical = bytes.slice();
+    critical[HEADER_LEN + 32 + 5] = 0x01; // second entry's flags byte
+    const r = await readPackage(critical);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('unknown-critical-section');
+  });
+
+  it('rejects out-of-order known sections', async () => {
+    const bytes = buildPackage([
+      { kind: SectionKind.Cont, compression: 1, payload: new TextEncoder().encode('c') },
+      { kind: SectionKind.Info, compression: 1, payload: infoPayload() },
+    ]);
+    const r = await readPackage(bytes);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('invalid-section-order');
+  });
+
+  it('rejects a package missing the required INFO section', async () => {
+    const bytes = buildPackage([
+      { kind: SectionKind.Cont, compression: 1, payload: new TextEncoder().encode('c') },
+    ]);
+    const r = await readPackage(bytes);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('missing-required-section');
+  });
+
   it('rejects a package whose INFO has unknown or wrong-typed keys', async () => {
     const infoOf = async (payload: Uint8Array) => {
       const r = await readPackage(buildPackage([{ kind: 1, compression: 0, payload }]));

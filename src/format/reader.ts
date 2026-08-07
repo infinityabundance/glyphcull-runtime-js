@@ -130,6 +130,8 @@ export interface SectionEntry {
   readonly index: number;
   readonly kind: number;
   readonly compression: Compression;
+  /** The flags byte: bit 0 is `critical`, meaningful only for unknown kinds. */
+  readonly flags: number;
   readonly offset: number;
   readonly storedLen: number;
   readonly decodedLen: number;
@@ -401,7 +403,12 @@ function parseEntry(bytes: Uint8Array, index: number): SectionEntry {
       index,
     );
   }
-  if (entryFlags !== 0 || reserved !== 0) {
+  // The flags byte: bit 0 is `critical`, meaningful only for unknown section
+  // kinds (SPEC.md §1.2 — a critical unknown section MUST be rejected; a
+  // noncritical one is skipped). Reserved bits 1..7 must be zero, and known
+  // kinds must carry no flags at all.
+  const knownKind = kind >= MIN_SECTION_KIND && kind <= MAX_SECTION_KIND;
+  if ((entryFlags & 0xfe) !== 0 || reserved !== 0 || (knownKind && entryFlags !== 0)) {
     throw new CullError(
       'invalid-flags',
       `section ${index}: reserved flags/reserved bits must be zero`,
@@ -418,7 +425,16 @@ function parseEntry(bytes: Uint8Array, index: number): SectionEntry {
   if (decodedLen === 0) {
     throw new CullError('invalid-value', `section ${index}: decoded_len must be at least 1`, index);
   }
-  return { index, kind, compression: compressionCode, offset, storedLen, decodedLen, crc32: crc };
+  return {
+    index,
+    kind,
+    compression: compressionCode,
+    flags: entryFlags,
+    offset,
+    storedLen,
+    decodedLen,
+    crc32: crc,
+  };
 }
 
 /**
@@ -1339,6 +1355,10 @@ export async function readPackage(bytes: Uint8Array): Promise<Result<Package>> {
     const sections = new Map<number, Uint8Array>();
     const unknown: { kind: number; payload: Uint8Array }[] = [];
     let totalDecoded = 0;
+    // Canonical-order enforcement for the known sections (SPEC.md §1.6): their
+    // kinds must be strictly increasing in file order; unknown kinds may appear
+    // anywhere.
+    let lastKnownKind = 0;
     for (const entry of entries) {
       const payload = await decodePayload(bytes, entry);
       totalDecoded += payload.length;
@@ -1361,10 +1381,33 @@ export async function readPackage(bytes: Uint8Array): Promise<Result<Package>> {
             entry.index,
           );
         }
+        if (lastKnownKind !== 0 && entry.kind <= lastKnownKind) {
+          throw new CullError(
+            'invalid-section-order',
+            `section ${entry.index}: kind ${entry.kind} appears after ${lastKnownKind} (canonical order violated)`,
+            entry.index,
+          );
+        }
+        lastKnownKind = entry.kind;
         sections.set(entry.kind, payload);
       } else {
+        // Unknown kind: noncritical sections (flags bit 0 clear) are skipped for
+        // forward compatibility; a critical unknown section is rejected
+        // (SPEC.md §1.2, §4).
+        if ((entry.flags & 0x01) !== 0) {
+          throw new CullError(
+            'unknown-critical-section',
+            `section ${entry.index}: unknown kind ${entry.kind} marked critical`,
+            entry.index,
+          );
+        }
         unknown.push({ kind: entry.kind, payload });
       }
+    }
+
+    // INFO is the required section: every conforming v1 package carries it.
+    if (!sections.has(SectionKind.Info)) {
+      throw new CullError('missing-required-section', 'required INFO section is absent');
     }
 
     // SEAL verification: covers every known non-SEAL section (canonical order).
