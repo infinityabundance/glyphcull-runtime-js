@@ -3,9 +3,9 @@
   "repository": "https://github.com/infinityabundance/glyphcull-runtime-js.git",
   "package": "glyphcull-runtime-js",
   "version": "0.1.0",
-  "git_commit": "3adc99178c6b5af5700b4b168af768f45ab4a4e6",
+  "git_commit": "ddfd95cd3fc4da61673b7c3d0a4b36319c72ce64",
   "git_tree_clean": true,
-  "source_archive_hash": "88518bd057b30b6541f175c08709bce134bfd43eaf81d5399cdde612338be42f",
+  "source_archive_hash": "ccdb53774a30e6e438ecb0339ed0b4e6af3c155a535698dc0ffa9900de739650",
   "package_archive_hash": "3b150be32bce18be88edec4b0a79b89528a906c9c964a64d28b84735ef931331",
   "toolchain": {
     "rust": "rustc 1.96.0 (ac68faa20 2026-05-25)",
@@ -25,5 +25,5 @@
     "conformance": "pass",
     "package_dry_run": "pass"
   },
-  "release_timestamp": "2026-08-07T19:07:24Z"
+  "release_timestamp": "2026-08-07T19:21:49Z"
 }
