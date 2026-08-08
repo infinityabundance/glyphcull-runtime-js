@@ -4,6 +4,18 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Fixed (WebGL `glitch` post effect was imperceptible)
+
+- The `glitch` post mode's bursts fired for ~1% of each cycle with sub-pixel
+  displacement, so the effect was technically present but invisible. The
+  shader now produces a clearly visible glitch: held-slice displacement
+  bursts (~40% duty cycle per 0.85 s), stronger chromatic separation that
+  scales with the burst, occasional horizontal block tears, and a rolling
+  cyan band — while never adding alpha over empty space (no bleed) and
+  staying deterministic per fixed clock time. Verified by the browser
+  harness: the mode alters the framebuffer, animates with the clock, and
+  stays under the bleed bound.
+
 ### Added (WebGL post-processing — the `effects.post` pass)
 
 - `load()` accepts an optional `effects.post` (`'clean' | 'glitch' |

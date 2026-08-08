@@ -14,9 +14,10 @@
 //! 2. **post** — a WebGL fragment-shader post-processing pass applied after
 //!    the document render (`gl.ts` renders the draw list into an offscreen
 //!    texture, then a full-screen pass runs the selected mode before
-//!    presenting): `clean` (identity), `glitch` (temporal slice jitter +
-//!    chromatic separation), `pixelated` (block-quantized sampling), and
-//!    `retro` (CRT scanlines + vignette + barrel + warm grade). Post is
+//!    presenting): `clean` (identity), `glitch` (held-slice displacement
+//!    bursts + chromatic separation + block tears + a rolling band),
+//!    `pixelated` (block-quantized sampling), and `retro` (CRT scanlines +
+//!    vignette + barrel + warm grade). Post is
 //!    WebGL-only: the Canvas 2D fallback cannot run a shader and renders
 //!    clean (the draw list itself — accent included — is renderer-agnostic).
 //!

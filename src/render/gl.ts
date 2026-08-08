@@ -71,7 +71,8 @@ void main() {
 
 // The post fragment shader: one pass, mode-selected by `uEffect`.
 //  0 clean      — the identity (exact copy; goldens unchanged)
-//  1 glitch     — temporal slice jitter + chromatic separation + block tears
+//  1 glitch     — held-slice displacement bursts + chromatic separation +
+//                 block tears + a rolling band (visible, ~40% duty cycle)
 //  2 pixelated  — block-quantized sampling (chunky pixels, real shader math)
 //  3 retro      — CRT scanlines + vignette + warm grade + RGB convergence
 //
@@ -94,32 +95,45 @@ vec4 sampleTex(vec2 uv) {
 
 vec4 applyGlitch(vec2 uv) {
   float t = uTime;
-  float row = floor(uv.y * 64.0);
-  float frame = floor(t * 6.0);
-  float rnd = fract(sin(row * 127.1 + frame * 13.7) * 43758.5453);
-  float rnd2 = fract(sin(row * 311.7 + frame * 7.3) * 9871.17);
-  // Full-slice displacement bursts ~every 0.8s.
-  float burst = smoothstep(0.985, 0.998, fract(t / 0.8));
-  float shift = burst * (rnd - 0.5) * 0.06;
-  // Continuous sub-pixel horizontal jitter.
-  float jitter = (fract(sin(row * 47.1 + t * 21.7) * 43758.5453) - 0.5) * 0.002;
-  float x = uv.x + jitter + shift;
-  // Chromatic separation that grows with the displacement.
-  float chroma = 0.004 + shift * 0.6;
-  float cr = (rnd2 - 0.5) * chroma;
-  float cg = (rnd2 - 0.5) * chroma * 0.5;
-  float cb = (rnd2 - 0.5) * chroma;
+  // ~44 horizontal slices form the glitch grid.
+  float row = floor(uv.y * 44.0);
+  // A glitch cycle every 0.85s: violent for ~40% of it, calm otherwise.
+  float phase = fract(t / 0.85);
+  float burst = smoothstep(0.02, 0.10, phase) * (1.0 - smoothstep(0.42, 0.50, phase));
+  // Per-frame-per-slice hashes (the pattern holds between frames, then
+  // jumps — the classic held glitch, not a noisy shimmer).
+  float frame = floor(t * 18.0);
+  float h1 = fract(sin(row * 127.1 + frame * 311.7) * 43758.5453);
+  float h2 = fract(sin(row * 269.5 + frame * 183.3) * 28001.8384);
+  float h3 = fract(sin(row * 419.2 + frame * 74.7) * 9511.631);
+  float h4 = fract(sin(row * 637.9 + frame * 41.3) * 30517.23);
+  // Roughly a third of the slices tear during the burst.
+  float active = step(0.62, h3);
+  // Slice displacement: up to ±2.6% of the width in the burst, plus a
+  // constant mild drift so the frame is never completely static.
+  float shift = (h1 - 0.5) * (0.052 * burst * active + 0.0035);
+  float x = uv.x + shift;
+  // Chromatic separation — strong in the burst, mild always (so the effect
+  // visibly processes the frame even between bursts).
+  float chroma = 0.008 + 0.035 * burst * active;
+  float ca = h2 - 0.5;
   vec4 col;
-  col.r = sampleTex(vec2(x + cr, uv.y)).r;
-  col.g = sampleTex(vec2(x + cg, uv.y)).g;
-  col.b = sampleTex(vec2(x + cb, uv.y)).b;
+  col.r = sampleTex(vec2(x + ca * chroma, uv.y)).r;
+  col.g = sampleTex(vec2(x, uv.y)).g;
+  col.b = sampleTex(vec2(x - ca * chroma, uv.y)).b;
   col.a = sampleTex(vec2(x, uv.y)).a;
-  // Rare horizontal block tear.
-  float tear = step(0.9965, fract(t * 11.0 + row * 0.13));
+  // Horizontal block tears: a row briefly samples a displaced region
+  // (duplicated slice fragments).
+  float tear = step(0.96, fract(t * 5.3 + row * 0.29));
   if (tear > 0.5) {
-    float rx = fract(sin(row * 199.7 + frame) * 7451.23);
-    col = sampleTex(vec2(uv.x + (rx - 0.5) * 0.3, uv.y));
+    float tx = h4;
+    float ty = fract(sin(row * 77.3 + frame * 29.9) * 13903.55);
+    col = sampleTex(vec2(uv.x + (tx - 0.5) * 0.1, uv.y + (ty - 0.5) * 0.02));
   }
+  // A rolling glitch band sweeping down through the burst: it brightens
+  // ink toward cyan and never adds alpha, so empty space stays empty.
+  float scan = 1.0 - smoothstep(0.0, 0.05, abs(fract(t * 0.4) - uv.y));
+  col.rgb += vec3(0.08, 0.22, 0.28) * scan * burst;
   return col;
 }
 
