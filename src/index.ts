@@ -27,6 +27,7 @@ import type { DocumentErrorKind } from './document/model.js';
 import type { Clock } from './clock.js';
 import type { Point, Selection, SelectionQuad, TextPosition } from './selection/selection.js';
 import type { Viewport } from './visibility/visibility.js';
+import type { PostEffect } from './render/effects.js';
 
 /**
  * Load a `.cull` package and construct its document handle. Rejects with the
@@ -45,6 +46,7 @@ export type {
   ErrorKind,
   LoadOptions,
   Point,
+  PostEffect,
   RuntimeErrorKind,
   Selection,
   SelectionQuad,

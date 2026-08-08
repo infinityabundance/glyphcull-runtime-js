@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { load } from '../../src/index.js';
+import type { LoadOptions } from '../../src/api/runtime.js';
 import { CullError } from '../../src/format/errors.js';
 import { DocumentError } from '../../src/document/model.js';
 import { RuntimeError } from '../../src/api/errors.js';
@@ -87,10 +88,19 @@ describe('load', () => {
       { theme: { ink: '#gggggg' } },
       { effects: { accent: 'blue' } },
       { effects: { accent: '#12345' } },
+      { effects: { post: 'shader' } },
+      { effects: { post: 'CLEAN' } },
+      { effects: { accent: '#d9822b', post: 'wireframe' } },
     ];
     for (const overrides of cases) {
       await expect(
-        load(pipelineGolden(), { canvas: fakeCanvas(), ...overrides }),
+        load(pipelineGolden(), {
+          // The cases are deliberately invalid (rejected at runtime); the
+          // cast keeps the negative-test table typed without weakening the
+          // public LoadOptions contract.
+          ...(overrides as unknown as LoadOptions),
+          canvas: fakeCanvas(),
+        }),
       ).rejects.toSatisfy((e) => e instanceof RuntimeError && e.kind === 'invalid-options');
     }
   });
@@ -121,6 +131,30 @@ describe('load', () => {
     const doc = await load(pipelineGolden(), {
       canvas: fakeCanvas(),
       effects: { accent: '#d9822b' },
+    });
+    doc.scroll({ x: 0, y: 0, w: 800, h: 600 }, 1);
+    doc.paint();
+    expect(doc.destroyed).toBe(false);
+    doc.destroy();
+  });
+
+  it('loads with a WebGL post effect and paints (Canvas 2D fallback renders clean)', async () => {
+    for (const post of ['glitch', 'pixelated', 'retro'] as const) {
+      const doc = await load(pipelineGolden(), {
+        canvas: fakeCanvas(),
+        effects: { post },
+      });
+      doc.scroll({ x: 0, y: 0, w: 800, h: 600 }, 1);
+      doc.paint();
+      expect(doc.destroyed).toBe(false);
+      doc.destroy();
+    }
+  });
+
+  it('loads with an accent + post effect together', async () => {
+    const doc = await load(pipelineGolden(), {
+      canvas: fakeCanvas(),
+      effects: { accent: '#d9822b', post: 'pixelated' },
     });
     doc.scroll({ x: 0, y: 0, w: 800, h: 600 }, 1);
     doc.paint();

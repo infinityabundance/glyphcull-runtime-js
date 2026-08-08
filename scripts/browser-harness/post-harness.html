@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GlyphCull post-effects harness</title>
+  </head>
+  <body>
+    <p>Post-processing validation: the WebGL post pass modes against the clean frame.</p>
+    <script type="module">
+      // The post-effects validation harness: renders the golden package with
+      // the WebGL renderer under the `clean` identity and under a requested
+      // post mode (?post=glitch|pixelated|retro), then proves in the
+      // framebuffer that:
+      //   - the mode genuinely alters pixels (differs from clean);
+      //   - transparency is preserved (no bleed into empty areas);
+      //   - pixelated produces hard block structure (real shader quantization);
+      //   - glitch animates with the runtime clock (t0 ≠ t1 at a fixed time);
+      //   - clean is byte-identical to the unprocessed render (the reference
+      //     compositor, via the shared MSDF reconstruction).
+      //
+      // The runtime's `effects` option also carries the accent; this harness
+      // tests post in isolation and combined.
+      import { load } from '/dist/index.js';
+      import { readPackage } from '/dist/format/reader.js';
+      import { buildDocument } from '/dist/document/model.js';
+      import { LayoutEngine } from '/dist/layout/layout.js';
+      import { computeVisibleSet } from '/dist/visibility/visibility.js';
+      import { DrawListBuilder } from '/dist/render/drawlist.js';
+      import { prepareGlyph } from '/dist/glyphs/cache.js';
+      import { coverageAt } from '/dist/render/msdf.js';
+      import { rgbaComponents } from '/dist/render/adapter.js';
+      import { FakeClock } from '/dist/clock.js';
+
+      window.__glyphcullPost = { state: 'running' };
+
+      const WIDTH = 800;
+      const HEIGHT = 600;
+      const MARGIN = 120;
+      const VIEWPORT = { x: 0, y: 0, w: WIDTH, h: HEIGHT };
+
+      async function main() {
+        const params = new URLSearchParams(location.search);
+        const post = params.get('post') || null;
+        const bytes = new Uint8Array(
+          await (await fetch('/fixtures/pipeline-golden.cull')).arrayBuffer(),
+        );
+        const results = {};
+        try {
+          // The CPU reference of the clean frame (the identity post pass must
+          // reproduce it exactly — the FBO → drawing-buffer copy is 1:1).
+          const reference = await buildReference(bytes);
+          const clean = await paintFrame(bytes, 'clean', 0);
+          const cleanStats = compare(clean, reference);
+          if (post === null) {
+            results.clean = {
+              ok: cleanStats.meanAbs <= 1 / 64,
+              meanAbs: cleanStats.meanAbs,
+              pixels: cleanStats.pixels,
+              limit: 1 / 64,
+            };
+          } else {
+            const a = await paintFrame(bytes, post, 0);
+            const b = await paintFrame(bytes, post, 1234);
+            results[post] = {
+              differs: diffPixels(clean, a) > 0,
+              animated: diffPixels(a, b) > 0,
+              bleedFraction: bleedFraction(clean, a),
+              ...(post === 'pixelated' ? { blockUniformity: blockUniformity(a) } : {}),
+            };
+          }
+        } catch (error) {
+          results[post ?? 'clean'] = { error: String(error) };
+        }
+        window.__glyphcullPost = { state: 'done', results };
+      }
+
+      /** The CPU reference of the clean frame (same as harness.html). */
+      async function buildReference(bytes) {
+        const parsed = await readPackage(bytes);
+        if (!parsed.ok) throw parsed.error;
+        const model = buildDocument(parsed.value);
+        if (!model.ok) throw model.error;
+        const engine = new LayoutEngine(model.value, { dpr: 1, contentWidth: WIDTH });
+        engine.extendTo(VIEWPORT.y + VIEWPORT.h + MARGIN);
+        const result = computeVisibleSet(model.value, engine, VIEWPORT, MARGIN);
+        const stamps = (chunkId, glyph) => {
+          void chunkId;
+          const atlas = model.value.atlases[glyph.atlasId];
+          return atlas === undefined
+            ? undefined
+            : prepareGlyph(atlas, glyph.codepoint, glyph.fontSizePx, glyph.color);
+        };
+        const resolver = {
+          atlasPage: (atlasId, pageIndex) => atlasId * 100 + pageIndex,
+          image: (imageId) => 2000 + imageId,
+        };
+        const list = new DrawListBuilder({ texture: resolver }).build(
+          engine,
+          result.visible,
+          stamps,
+          [],
+        );
+        return compositeReference(model.value, list);
+      }
+
+      /** Paint one frame with the given post mode at a fixed clock time. */
+      async function paintFrame(bytes, post, timeMs) {
+        const canvas = document.createElement('canvas');
+        canvas.width = WIDTH;
+        canvas.height = HEIGHT;
+        document.body.appendChild(canvas);
+        const clock = new FakeClock();
+        clock.advance(timeMs);
+        const doc = await load(bytes, {
+          canvas,
+          contentWidth: WIDTH,
+          width: WIDTH,
+          height: HEIGHT,
+          dpr: 1,
+          margin: MARGIN,
+          renderer: 'webgl',
+          effects: { post },
+          clock,
+        });
+        doc.scroll(VIEWPORT, 1);
+        doc.paint();
+        const pixels = readPixels(canvas);
+        doc.destroy();
+        canvas.remove();
+        return pixels;
+      }
+
+      /** The composited premultiplied reference from the draw list. */
+      function compositeReference(model, list) {
+        const buffer = new Float32Array(WIDTH * HEIGHT * 4);
+        for (const command of list.commands) {
+          if (command.type !== 'glyph') continue;
+          const atlas = model.atlases[Math.floor(command.texture / 100)];
+          if (atlas === undefined) continue;
+          const page = atlas.pages[command.texture % 100];
+          if (page === undefined) continue;
+          const [u0, v0, u1, v1] = command.uv;
+          const boxX = u0 * atlas.pageWidth;
+          const boxY = v0 * atlas.pageHeight;
+          const boxW = (u1 - u0) * atlas.pageWidth;
+          const boxH = (v1 - v0) * atlas.pageHeight;
+          const outW = Math.max(1, Math.round(command.w));
+          const outH = Math.max(1, Math.round(command.h));
+          const [r, g, b, a] = rgbaComponents(command.color);
+          const x0 = Math.round(command.x);
+          const y0 = Math.round(command.y);
+          for (let oy = 0; oy < outH; oy++) {
+            for (let ox = 0; ox < outW; ox++) {
+              const dx = x0 + ox;
+              const dy = y0 + oy;
+              if (dx < 0 || dy < 0 || dx >= WIDTH || dy >= HEIGHT) continue;
+              const tx = boxX + ((dx + 0.5 - command.x) * boxW) / command.w;
+              const ty = boxY + ((dy + 0.5 - command.y) * boxH) / command.h;
+              const c = coverageAt(page, atlas.pageWidth, tx, ty, command.pxPerTexel);
+              const i = (dy * WIDTH + dx) * 4;
+              buffer[i] = r * c + buffer[i] * (1 - a * c);
+              buffer[i + 1] = g * c + buffer[i + 1] * (1 - a * c);
+              buffer[i + 2] = b * c + buffer[i + 2] * (1 - a * c);
+              buffer[i + 3] = a * c + buffer[i + 3] * (1 - a * c);
+            }
+          }
+        }
+        return { buffer };
+      }
+
+      /** RGBA8 premultiplied readback, top-down. */
+      function readPixels(canvas) {
+        const gl = canvas.getContext('webgl');
+        const pixels = new Uint8Array(WIDTH * HEIGHT * 4);
+        gl.readPixels(0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const out = new Uint8Array(pixels);
+        // Flip rows to top-down (readPixels rows are bottom-up).
+        const row = WIDTH * 4;
+        for (let y = 0; y < HEIGHT / 2; y++) {
+          const a = y * row;
+          const b = (HEIGHT - 1 - y) * row;
+          for (let i = 0; i < row; i++) {
+            const t = out[a + i];
+            out[a + i] = out[b + i];
+            out[b + i] = t;
+          }
+        }
+        return out;
+      }
+
+      /** Mean abs error per channel over drawn pixels (premultiplied). */
+      function compare(read, reference) {
+        let sum = 0;
+        let pixels = 0;
+        for (let y = 0; y < HEIGHT; y++) {
+          for (let x = 0; x < WIDTH; x++) {
+            const i = (y * WIDTH + x) * 4;
+            const refA = reference.buffer[i + 3];
+            if (refA <= 0.01) continue;
+            const err =
+              (Math.abs(read[i] - reference.buffer[i] * 255) +
+                Math.abs(read[i + 1] - reference.buffer[i + 1] * 255) +
+                Math.abs(read[i + 2] - reference.buffer[i + 2] * 255) +
+                Math.abs(read[i + 3] - refA * 255)) /
+              4 /
+              255;
+            sum += err;
+            pixels++;
+          }
+        }
+        return { meanAbs: pixels === 0 ? Infinity : sum / pixels, pixels };
+      }
+
+      /** Count pixels where the two frames differ (any channel, > 2/255). */
+      function diffPixels(a, b) {
+        let n = 0;
+        for (let i = 0; i < a.length; i++) {
+          if (Math.abs(a[i] - b[i]) > 2) n++;
+        }
+        return n;
+      }
+
+      /** Fraction of the frame the post pass painted over transparent clean. */
+      function bleedFraction(clean, post) {
+        let drawn = 0;
+        let bleed = 0;
+        for (let i = 0; i < clean.length; i += 4) {
+          if (clean[i + 3] > 2) drawn++;
+          else if (post[i + 3] > 2) bleed++;
+        }
+        // Spatial modes (glitch, pixelated) legitimately move ink by a few
+        // device px at glyph edges; the bound keeps the frame from filling.
+        return drawn === 0 ? 0 : bleed / Math.max(1, drawn);
+      }
+
+      /** Fraction of 6×6 blocks whose pixels all equal the block's first. */
+      function blockUniformity(pixels) {
+        const BLOCK = 6;
+        let uniform = 0;
+        let total = 0;
+        for (let by = 0; by < HEIGHT; by += BLOCK) {
+          for (let bx = 0; bx < WIDTH; bx += BLOCK) {
+            const ref = (by * WIDTH + bx) * 4;
+            let ok = true;
+            for (let y = by; y < Math.min(by + BLOCK, HEIGHT) && ok; y++) {
+              for (let x = bx; x < Math.min(bx + BLOCK, WIDTH) && ok; x++) {
+                const i = (y * WIDTH + x) * 4;
+                for (let c = 0; c < 4; c++) {
+                  if (pixels[i + c] !== pixels[ref + c]) {
+                    ok = false;
+                    break;
+                  }
+                }
+              }
+            }
+            total++;
+            if (ok) uniform++;
+          }
+        }
+        return total === 0 ? 0 : uniform / total;
+      }
+
+      main();
+    </script>
+  </body>
+</html>

@@ -4,6 +4,27 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Added (WebGL post-processing — the `effects.post` pass)
+
+- `load()` accepts an optional `effects.post` (`'clean' | 'glitch' |
+  'pixelated' | 'retro'`): a genuine **fragment-shader post-processing pass**
+  on the WebGL renderer (`render/gl.ts`). Every frame renders into an
+  offscreen framebuffer texture; a full-screen quad then runs the selected
+  mode before presenting — `clean` (the identity; byte-identical to before,
+  goldens unchanged), `glitch` (temporal slice jitter + chromatic separation
+  + block tears), `pixelated` (block-quantized sampling), `retro` (CRT
+  scanlines + vignette + warm grade + RGB convergence). The pass animates
+  with the runtime's animation clock (`viewport.time`, the same clock the
+  accent uses), so a frame at a fixed time is deterministic; the Canvas 2D
+  fallback cannot run a shader and renders clean. `effects.accent` is now
+  optional (a `post`-only configuration is valid). Tests: `api` (option
+  validation + post loads + accent/post combined) and the browser harness
+  (`scripts/browser-harness/post-harness.html` +
+  `test/browser/post-effects.spec.ts`) — the identity stays within reference
+  tolerance, each mode alters the framebuffer, glitch animates with the
+  clock, pixelated produces hard block structure, and no mode fills the
+  frame.
+
 ### Added (render effects — the animated accent)
 
 - `load()` accepts an optional `effects: { accent: '#rrggbb' }`: glyphs the

@@ -30,6 +30,8 @@ const server = createServer(async (req, res) => {
   let file;
   if (path === '/' || path === '/harness.html') {
     file = join(here, 'harness.html');
+  } else if (path === '/post-harness.html') {
+    file = join(here, 'post-harness.html');
   } else if (path.startsWith('/dist/')) {
     file = join(root, 'dist', path.slice('/dist/'.length));
   } else if (path.startsWith('/fixtures/')) {

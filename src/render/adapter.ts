@@ -15,6 +15,12 @@ export interface RendererViewport {
   readonly h: number;
   /** The device pixel ratio. */
   readonly dpr: number;
+  /**
+   * Animation time in seconds for host render effects (the WebGL post
+   * pass — `render/effects.ts`). A paint at a fixed time is deterministic;
+   * the Canvas 2D fallback has no post pass and ignores it.
+   */
+  readonly time?: number;
 }
 
 /** A pixel source for texture upload (implemented from the document model). */

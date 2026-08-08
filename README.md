@@ -132,15 +132,34 @@ renders exactly as compiled. See `src/render/theme.ts`.
 const dark = await load(bytes, { canvas, theme: { ink: '#ffffff' } });
 ```
 
-## Render effects (host animation)
+## Render effects (host animation + WebGL post-processing)
 
-`load()` accepts an optional `effects: { accent: '#rrggbb' }` — glyphs the
-document paints in that exact color render with a **running highlight**: a
-light band sweeps along the bar over time, positioned by the glyph's x and
-an animation time the host advances by repainting (`doc.paint()` on a rAF
-loop). The runtime never self-animates; a paint at a fixed time is
-deterministic. Every other color, image, and background is untouched. See
-`src/render/effects.ts`.
+`load()` accepts an optional `effects` — host presentation on top of the theme;
+without it the document renders exactly as compiled (the identity):
+
+- `effects: { accent: '#rrggbb' }` — glyphs the document paints in that exact
+  color render with a **running highlight**: a light band sweeps along the bar
+  over time, positioned by the glyph's x and an animation time the host
+  advances by repainting (`doc.paint()` on a rAF loop). The runtime never
+  self-animates; a paint at a fixed time is deterministic. Every other color,
+  image, and background is untouched. See `src/render/effects.ts`.
+- `effects: { post: 'clean' | 'glitch' | 'pixelated' | 'retro' }` — a genuine
+  **fragment-shader post-processing pass** (WebGL only): the renderer draws the
+  document into an offscreen texture, then a full-screen quad runs the selected
+  mode before presenting. `clean` is the identity (byte-identical — goldens
+  unchanged); `glitch` adds temporal slice jitter + chromatic separation;
+  `pixelated` block-quantizes the frame in the shader; `retro` adds CRT
+  scanlines, a vignette, and a warm grade. The mode animates with the same
+  clock; the Canvas 2D fallback cannot run a shader and renders clean. See
+  `src/render/gl.ts` (the post pass) and the browser harness
+  (`test/browser/post-effects.spec.ts`).
+
+```js
+const glitchy = await load(bytes, {
+  canvas,
+  effects: { accent: '#d9822b', post: 'glitch' },
+});
+```
 
 ## Rendering convention (normative)
 

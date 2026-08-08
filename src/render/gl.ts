@@ -4,10 +4,21 @@
 //! reference rasterizer agree within tolerance. Premultiplied alpha,
 //! DPR-aware, batched by texture, with context-loss recovery (textures are
 //! re-uploaded from the source on restore).
+//!
+//! Post-processing (`effects.ts`): every frame is rendered into an
+//! offscreen framebuffer texture, then a full-screen quad applies the
+//! selected post fragment shader to the drawing buffer before presenting.
+//! `clean` copies the offscreen texture 1:1 (NEAREST at exact texel
+//! centers — byte-identical to rendering directly, so goldens and the
+//! reference harness are unchanged); `glitch`, `pixelated`, and `retro`
+//! are genuine fragment-shader effects. The mode is fixed per renderer
+//! (hosts reload with `load(bytes, { effects: { post } })`); the animation
+//! clock arrives per frame as `viewport.time`.
 
 import type { DrawCommand, DrawList } from './drawlist.js';
 import type { RendererAdapter, RendererViewport, TextureSource } from './adapter.js';
 import { rgbaComponents } from './adapter.js';
+import type { PostEffect } from './effects.js';
 
 const VERTEX_SRC = `
 attribute vec2 aPos;
@@ -48,6 +59,122 @@ void main() {
 }
 `;
 
+/** The full-screen quad (NDC triangle strip); UVs map to the source 1:1. */
+const POST_VERTEX_SRC = `
+attribute vec2 aPos;
+varying vec2 vUv;
+void main() {
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
+// The post fragment shader: one pass, mode-selected by `uEffect`.
+//  0 clean      — the identity (exact copy; goldens unchanged)
+//  1 glitch     — temporal slice jitter + chromatic separation + block tears
+//  2 pixelated  — block-quantized sampling (chunky pixels, real shader math)
+//  3 retro      — CRT scanlines + vignette + warm grade + RGB convergence
+//
+// The source texture holds *premultiplied* colors (the document renders
+// with the ONE, ONE_MINUS_SRC_ALPHA blend); the pass preserves that: the
+// premultiplied invariant (rgb ≤ a) is re-clamped so the canvas composites
+// exactly as the document renderer intends. `uTime` is the runtime's
+// animation clock, so a frame at a fixed time is deterministic.
+const POST_FRAGMENT_SRC = `
+precision mediump float;
+uniform sampler2D uTex;
+uniform vec2 uResolution; // device pixel size of the source
+uniform float uTime;      // animation clock, seconds
+uniform int uEffect;      // 0 clean, 1 glitch, 2 pixelated, 3 retro
+varying vec2 vUv;
+
+vec4 sampleTex(vec2 uv) {
+  return texture2D(uTex, clamp(uv, 0.0, 1.0));
+}
+
+vec4 applyGlitch(vec2 uv) {
+  float t = uTime;
+  float row = floor(uv.y * 64.0);
+  float frame = floor(t * 6.0);
+  float rnd = fract(sin(row * 127.1 + frame * 13.7) * 43758.5453);
+  float rnd2 = fract(sin(row * 311.7 + frame * 7.3) * 9871.17);
+  // Full-slice displacement bursts ~every 0.8s.
+  float burst = smoothstep(0.985, 0.998, fract(t / 0.8));
+  float shift = burst * (rnd - 0.5) * 0.06;
+  // Continuous sub-pixel horizontal jitter.
+  float jitter = (fract(sin(row * 47.1 + t * 21.7) * 43758.5453) - 0.5) * 0.002;
+  float x = uv.x + jitter + shift;
+  // Chromatic separation that grows with the displacement.
+  float chroma = 0.004 + shift * 0.6;
+  float cr = (rnd2 - 0.5) * chroma;
+  float cg = (rnd2 - 0.5) * chroma * 0.5;
+  float cb = (rnd2 - 0.5) * chroma;
+  vec4 col;
+  col.r = sampleTex(vec2(x + cr, uv.y)).r;
+  col.g = sampleTex(vec2(x + cg, uv.y)).g;
+  col.b = sampleTex(vec2(x + cb, uv.y)).b;
+  col.a = sampleTex(vec2(x, uv.y)).a;
+  // Rare horizontal block tear.
+  float tear = step(0.9965, fract(t * 11.0 + row * 0.13));
+  if (tear > 0.5) {
+    float rx = fract(sin(row * 199.7 + frame) * 7451.23);
+    col = sampleTex(vec2(uv.x + (rx - 0.5) * 0.3, uv.y));
+  }
+  return col;
+}
+
+vec4 applyPixelated(vec2 uv) {
+  // Block-quantized sampling: ~1/6 of the device resolution per block.
+  vec2 blocks = max(uResolution / 6.0, vec2(1.0));
+  vec2 p = (floor(uv * blocks) + 0.5) / blocks;
+  return sampleTex(p);
+}
+
+vec4 applyRetro(vec2 uv) {
+  // The document paints edge-to-edge (no bezel), so a geometric barrel
+  // would smear the borders; the CRT look comes from scanlines, vignette,
+  // a warm grade, and a subtle RGB convergence shift toward the edges
+  // (chromatic fringing — alpha is untouched, so nothing bleeds).
+  vec2 c = uv - 0.5;
+  vec4 col;
+  col.r = sampleTex(vec2(uv.x + 0.0015 * c.x, uv.y)).r;
+  col.g = sampleTex(uv).g;
+  col.b = sampleTex(vec2(uv.x - 0.0015 * c.x, uv.y)).b;
+  col.a = sampleTex(uv).a;
+  // CRT scanlines: every third line is dimmed.
+  float line = mod(floor(uv.y * uResolution.y), 3.0);
+  col.rgb *= 0.84 + 0.16 * smoothstep(1.0, 2.0, line);
+  // Vignette.
+  float vig = 1.0 - smoothstep(0.35, 0.9, length(c) * 1.4);
+  col.rgb *= mix(0.5, 1.0, vig);
+  // Warm CRT grade (scaling premultiplied channels keeps the blend valid).
+  col.r *= 1.06;
+  col.g *= 0.98;
+  col.b *= 0.9;
+  return col;
+}
+
+void main() {
+  vec4 col;
+  if (uEffect == 1) col = applyGlitch(vUv);
+  else if (uEffect == 2) col = applyPixelated(vUv);
+  else if (uEffect == 3) col = applyRetro(vUv);
+  else col = sampleTex(vUv);
+  // The premultiplied invariant: never let a channel exceed the alpha
+  // (shifts and grades can disturb it; the canvas compositor needs it).
+  col.rgb = min(col.rgb, vec3(col.a));
+  gl_FragColor = col;
+}
+`;
+
+/** The post-mode → shader selector. */
+const POST_IDS: Record<PostEffect, number> = {
+  clean: 0,
+  glitch: 1,
+  pixelated: 2,
+  retro: 3,
+};
+
 /** Options for the WebGL renderer. */
 export interface GlOptions {
   /** The canvas to render into. */
@@ -56,12 +183,15 @@ export interface GlOptions {
   readonly source: TextureSource;
   /** Invoked after a context restore. */
   onRestored?: () => void;
+  /** The post-processing pass (default 'clean'). */
+  readonly post?: PostEffect;
 }
 
 /** The WebGL MSDF renderer. */
 export class WebGlRenderer implements RendererAdapter {
   private readonly canvas: HTMLCanvasElement;
   private readonly source: TextureSource;
+  private readonly post: PostEffect;
   private readonly restored: (() => void)[] = [];
   private gl: WebGLRenderingContext | null = null;
   private program: WebGLProgram | null = null;
@@ -75,6 +205,18 @@ export class WebGlRenderer implements RendererAdapter {
   private nextHandle = 2;
   private lost = false;
 
+  // The post-processing pass (offscreen framebuffer + full-screen quad).
+  private postProgram: WebGLProgram | null = null;
+  private postA = -1;
+  private postVbo: WebGLBuffer | null = null;
+  private fb: WebGLFramebuffer | null = null;
+  private fbTexture: WebGLTexture | null = null;
+  private fbSize = { w: 0, h: 0 };
+  private uPostTex: WebGLUniformLocation | null = null;
+  private uPostRes: WebGLUniformLocation | null = null;
+  private uPostTime: WebGLUniformLocation | null = null;
+  private uPostEffect: WebGLUniformLocation | null = null;
+
   private aPos = -1;
   private aUv = -1;
   private aColor = -1;
@@ -86,6 +228,7 @@ export class WebGlRenderer implements RendererAdapter {
   constructor(options: GlOptions) {
     this.canvas = options.canvas;
     this.source = options.source;
+    this.post = options.post ?? 'clean';
     if (options.onRestored !== undefined) this.restored.push(options.onRestored);
     const gl = this.canvas.getContext('webgl', {
       premultipliedAlpha: true,
@@ -148,6 +291,76 @@ export class WebGlRenderer implements RendererAdapter {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    this.initPost(gl);
+    // The offscreen target exists from the start (the canvas's attribute
+    // size is the initial surface; resize() replaces it as needed).
+    this.ensureFramebuffer(gl, this.canvas.width, this.canvas.height);
+  }
+
+  /** Compile the post program and the full-screen quad. */
+  private initPost(gl: WebGLRenderingContext): void {
+    const vs = compileShader(gl, gl.VERTEX_SHADER, POST_VERTEX_SRC);
+    const fs = compileShader(gl, gl.FRAGMENT_SHADER, POST_FRAGMENT_SRC);
+    const program = gl.createProgram() as WebGLProgram | null;
+    if (program === null || vs === null || fs === null) return;
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(`WebGL post program link failed: ${gl.getProgramInfoLog(program)}`);
+    }
+    this.postProgram = program;
+    this.postA = gl.getAttribLocation(program, 'aPos');
+    this.uPostTex = gl.getUniformLocation(program, 'uTex');
+    this.uPostRes = gl.getUniformLocation(program, 'uResolution');
+    this.uPostTime = gl.getUniformLocation(program, 'uTime');
+    this.uPostEffect = gl.getUniformLocation(program, 'uEffect');
+    const vbo = gl.createBuffer() as WebGLBuffer | null;
+    if (vbo !== null) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        gl.STATIC_DRAW,
+      );
+    }
+    this.postVbo = vbo;
+  }
+
+  /** (Re)create the offscreen target at the given device size. */
+  private ensureFramebuffer(gl: WebGLRenderingContext, w: number, h: number): void {
+    if (this.fb !== null && this.fbTexture !== null && this.fbSize.w === w && this.fbSize.h === h) {
+      return;
+    }
+    this.fbSize = { w, h };
+    const texture = gl.createTexture() as WebGLTexture | null;
+    const fb = gl.createFramebuffer() as WebGLFramebuffer | null;
+    if (texture === null || fb === null) {
+      this.fb = null;
+      this.fbTexture = null;
+      return;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // NEAREST: the post pass maps each drawing-buffer pixel to exactly one
+    // source texel (clean is a 1:1 copy; block modes quantize in shader UV).
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      // An incomplete offscreen target (e.g. a driver with a 0-sized
+      // surface): fall back to rendering directly to the drawing buffer and
+      // skip the post pass — the document still renders, unprocessed.
+      this.fb = null;
+      this.fbTexture = null;
+    } else {
+      this.fb = fb;
+      this.fbTexture = texture;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   private handleForPage(atlasId: number, pageIndex: number): number {
@@ -229,11 +442,19 @@ export class WebGlRenderer implements RendererAdapter {
     this.canvas.width = Math.max(1, Math.round(width * dpr));
     this.canvas.height = Math.max(1, Math.round(height * dpr));
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    this.ensureFramebuffer(gl, this.canvas.width, this.canvas.height);
   }
 
   draw(list: DrawList, viewport: RendererViewport): void {
     const gl = this.gl;
     if (gl === null || this.program === null) return;
+    // The document renders into the offscreen target; the post pass then
+    // presents it (or, if the offscreen target is unavailable, directly).
+    if (this.fb !== null) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb);
+      gl.viewport(0, 0, this.fbSize.w, this.fbSize.h);
+    }
+    gl.enable(gl.BLEND);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
@@ -268,6 +489,36 @@ export class WebGlRenderer implements RendererAdapter {
       }
     }
     flush();
+    this.drawPost(gl, viewport.time ?? 0);
+  }
+
+  /** The full-screen post pass: offscreen texture → drawing buffer. */
+  private drawPost(gl: WebGLRenderingContext, time: number): void {
+    if (
+      this.fb === null ||
+      this.fbTexture === null ||
+      this.postProgram === null ||
+      this.postVbo === null
+    ) {
+      return;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    // The source is already premultiplied; write it through unblended so
+    // the canvas compositor sees exactly the document's composited color.
+    gl.disable(gl.BLEND);
+    gl.useProgram(this.postProgram);
+    gl.bindTexture(gl.TEXTURE_2D, this.fbTexture);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(this.uPostTex, 0);
+    gl.uniform2f(this.uPostRes, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.uPostTime, time);
+    gl.uniform1i(this.uPostEffect, POST_IDS[this.post]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.postVbo);
+    gl.enableVertexAttribArray(this.postA);
+    gl.vertexAttribPointer(this.postA, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.enable(gl.BLEND);
   }
 
   private drawFill(command: Extract<DrawCommand, { type: 'fill' | 'ruler' }>): void {

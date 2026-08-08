@@ -28,7 +28,8 @@ import { DrawListBuilder } from '../render/drawlist.js';
 import type { TextureResolver } from '../render/drawlist.js';
 import { parseThemeInk, themedColor } from '../render/theme.js';
 import type { Theme } from '../render/theme.js';
-import type { Effects } from '../render/effects.js';
+import type { Effects, PostEffect } from '../render/effects.js';
+import { isPostEffect } from '../render/effects.js';
 import type { RendererAdapter, TextureSource } from '../render/adapter.js';
 import { WebGlRenderer } from '../render/gl.js';
 import {
@@ -95,12 +96,17 @@ export interface LoadOptions {
    */
   readonly theme?: { readonly ink: string };
   /**
-   * Host render effects (presentation, `render/effects.ts`): `accent` marks
-   * a color — glyphs the document paints in that exact color render with a
-   * time-animated running highlight (the host repaints to advance it; the
-   * runtime never self-animates). Omit for the identity.
+   * Host render effects (presentation, `render/effects.ts`):
+   *  - `accent` marks a color — glyphs the document paints in that exact
+   *    color render with a time-animated running highlight (the host
+   *    repaints to advance it; the runtime never self-animates);
+   *  - `post` selects the WebGL post-processing pass applied after the
+   *    document render (`clean` (default) | `glitch` | `pixelated` |
+   *    `retro`); the post pass is WebGL-only — the Canvas 2D fallback
+   *    cannot run a shader and renders clean.
+   * Omit for the identity.
    */
-  readonly effects?: { readonly accent: string };
+  readonly effects?: { readonly accent?: string; readonly post?: PostEffect };
   /** The time source (determinism seam; production uses the wall clock). */
   readonly clock?: Clock;
 }
@@ -173,7 +179,12 @@ export class DocumentHost implements Document {
             ...(this.effects === undefined ? {} : { effects: this.effects }),
           },
     );
-    this.renderer = createRenderer(options.renderer, options.canvas, this.textureSource);
+    this.renderer = createRenderer(
+      options.renderer,
+      options.canvas,
+      this.textureSource,
+      this.effects?.post,
+    );
     this.topLevelIds = new Set(doc.childIds(doc.root.id));
     const width = options.width ?? (options.canvas.clientWidth || options.contentWidth);
     const height = options.height ?? (options.canvas.clientHeight || 600);
@@ -247,6 +258,7 @@ export class DocumentHost implements Document {
       w: this.viewport.w,
       h: this.viewport.h,
       dpr: this.dpr,
+      time,
     });
   }
 
@@ -449,14 +461,20 @@ function parseTheme(theme: LoadOptions['theme']): Theme | undefined {
 /** Parse the host effects option (rejected with the typed error when invalid). */
 function parseEffects(effects: LoadOptions['effects']): Effects | undefined {
   if (effects === undefined) return undefined;
-  const accent = parseThemeInk(effects.accent);
-  if (accent === undefined) {
-    throw new RuntimeError(
-      'invalid-options',
-      `effects.accent must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(effects.accent)}`,
-    );
+  if (effects.accent !== undefined) {
+    const accent = parseThemeInk(effects.accent);
+    if (accent === undefined) {
+      throw new RuntimeError(
+        'invalid-options',
+        `effects.accent must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(effects.accent)}`,
+      );
+    }
+    return {
+      accent,
+      ...(effects.post === undefined ? {} : { post: effects.post }),
+    };
   }
-  return { accent };
+  return effects.post === undefined ? undefined : { post: effects.post };
 }
 
 /** Validate load options; reject nonsense with a typed error. */
@@ -487,10 +505,20 @@ function validateOptions(options: LoadOptions): void {
   if (options.theme !== undefined && parseThemeInk(options.theme.ink) === undefined) {
     reject(`theme.ink must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(options.theme.ink)}`);
   }
-  if (options.effects !== undefined && parseThemeInk(options.effects.accent) === undefined) {
-    reject(
-      `effects.accent must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(options.effects.accent)}`,
-    );
+  if (options.effects !== undefined) {
+    if (
+      options.effects.accent !== undefined &&
+      parseThemeInk(options.effects.accent) === undefined
+    ) {
+      reject(
+        `effects.accent must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(options.effects.accent)}`,
+      );
+    }
+    if (options.effects.post !== undefined && !isPostEffect(options.effects.post)) {
+      reject(
+        `effects.post must be one of 'clean' | 'glitch' | 'pixelated' | 'retro', got ${JSON.stringify(options.effects.post)}`,
+      );
+    }
   }
 }
 
@@ -499,10 +527,15 @@ function createRenderer(
   preference: 'auto' | 'webgl' | 'canvas2d' | undefined,
   canvas: HTMLCanvasElement,
   source: TextureSource,
+  post: PostEffect | undefined,
 ): RendererAdapter {
   if (preference !== 'canvas2d') {
     try {
-      const renderer = new WebGlRenderer({ canvas, source });
+      const renderer = new WebGlRenderer({
+        canvas,
+        source,
+        ...(post === undefined ? {} : { post }),
+      });
       if (!renderer.contextLost) return renderer;
     } catch {
       // Fall through to the Canvas 2D fallback.
