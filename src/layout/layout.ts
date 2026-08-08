@@ -826,11 +826,19 @@ export class LayoutEngine implements GeometrySource {
     width: number,
   ): BlockLayout {
     const chunk = this.doc.chunk(chunkId)!;
+    // A table caption is a `caption` chunk child (SPEC.md §2.2): lay it out
+    // above the rows and advance the table's origin by its height.
+    let caption: BlockLayout | undefined;
     const rows: { cellIds: number[]; spans: { colspan: number; rowspan: number }[] }[] = [];
-    for (const rowId of this.doc.childIds(chunk.id)) {
+    for (const childId of this.doc.childIds(chunk.id)) {
+      const child = this.doc.chunk(childId)!;
+      if (child.kind === ChunkKind.Caption) {
+        caption = this.layoutTextBlock(childId, style, x, y, width);
+        continue;
+      }
       const cellIds: number[] = [];
       const spans: { colspan: number; rowspan: number }[] = [];
-      for (const cellId of this.doc.childIds(rowId)) {
+      for (const cellId of this.doc.childIds(childId)) {
         cellIds.push(cellId);
         let colspan = 1;
         let rowspan = 1;
@@ -911,7 +919,7 @@ export class LayoutEngine implements GeometrySource {
       acc += w;
     }
     const placements: CellPlacement[][] = [];
-    let rowY = y;
+    let rowY = y + (caption !== undefined ? caption.h : 0);
     const rowYPositions: number[] = [];
     for (const h of rowHeights) {
       rowYPositions.push(rowY);
@@ -941,8 +949,9 @@ export class LayoutEngine implements GeometrySource {
       }
       placements.push(rowPlacements);
     }
-    const table: TableLayout = { x, y, w: acc - x, columns: colWidths, rows: placements };
-    const height = rowY - y;
+    const table: TableLayout = { x, y: rowYPositions[0] ?? y, w: acc - x, columns: colWidths, rows: placements };
+    const height = rowY - (rowYPositions[0] ?? y) + (caption !== undefined ? caption.h : 0);
+    const cellChildren = placements.flat().map((p) => p.cell);
     return {
       chunkId,
       kind: ChunkKind.Table,
@@ -952,7 +961,7 @@ export class LayoutEngine implements GeometrySource {
       w: acc - x,
       h: height,
       lines: [],
-      children: placements.flat().map((p) => p.cell),
+      children: caption !== undefined ? [caption, ...cellChildren] : cellChildren,
       marker: undefined,
       image: undefined,
       table,
