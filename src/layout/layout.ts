@@ -949,7 +949,13 @@ export class LayoutEngine implements GeometrySource {
       }
       placements.push(rowPlacements);
     }
-    const table: TableLayout = { x, y: rowYPositions[0] ?? y, w: acc - x, columns: colWidths, rows: placements };
+    const table: TableLayout = {
+      x,
+      y: rowYPositions[0] ?? y,
+      w: acc - x,
+      columns: colWidths,
+      rows: placements,
+    };
     const height = rowY - (rowYPositions[0] ?? y) + (caption !== undefined ? caption.h : 0);
     const cellChildren = placements.flat().map((p) => p.cell);
     return {
