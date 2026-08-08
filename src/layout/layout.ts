@@ -1033,8 +1033,12 @@ export class LayoutEngine implements GeometrySource {
             const runStyle = this.styleOf(id);
             const atlas = this.atlasFor(runStyle);
             if (atlas !== undefined) {
-              segment += measureRun(atlas, text, runStyle.fontSizePx, runStyle.letterSpacing)
-                .widthPx;
+              segment += measureRun(
+                atlas,
+                text,
+                runStyle.fontSizePx,
+                runStyle.letterSpacing,
+              ).widthPx;
             }
           }
           for (const childId of this.doc.childIds(id)) walk(childId);

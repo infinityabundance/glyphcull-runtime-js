@@ -17,6 +17,8 @@ import { measureRun } from '../layout/measure.js';
 import type { SelectionQuad } from '../selection/selection.js';
 import { themedColor } from './theme.js';
 import type { Theme } from './theme.js';
+import { effectGlyphColor } from './effects.js';
+import type { Effects } from './effects.js';
 
 /** A textured glyph quad. */
 export interface GlyphCommand {
@@ -81,16 +83,28 @@ export interface DrawListOptions {
   readonly texture: TextureResolver;
   /** Host presentation: re-ink the document's default ink (see `theme.ts`). */
   readonly theme?: Theme;
+  /** Host render effects: animated accent (see `effects.ts`). */
+  readonly effects?: Effects;
 }
 
 /** The draw list builder. */
 export class DrawListBuilder {
   private readonly texture: TextureResolver;
   private readonly theme: Theme | undefined;
+  private readonly effects: Effects | undefined;
 
   constructor(options: DrawListOptions) {
     this.texture = options.texture;
     this.theme = options.theme;
+    this.effects = options.effects;
+  }
+
+  /**
+   * The presented color of a glyph: the theme ink, then the effects accent.
+   * `time` (seconds) advances the running highlight; `0` is deterministic.
+   */
+  private glyphColor(color: number, x: number, time: number): number {
+    return effectGlyphColor(themedColor(color, this.theme), this.effects, x, time);
   }
 
   /**
@@ -105,6 +119,8 @@ export class DrawListBuilder {
     visibleIds: readonly number[],
     stamps: (chunkId: number, glyph: GlyphInstance) => GlyphStamp | undefined,
     selection: readonly SelectionQuad[] = [],
+    /** Animation time in seconds (effects accent; 0 = deterministic). */
+    time = 0,
   ): DrawList {
     const commands: DrawCommand[] = [];
     for (const quad of selection) {
@@ -125,7 +141,7 @@ export class DrawListBuilder {
     const emitted = new Set<number>();
     for (const chunkId of visibleIds) {
       if (emitted.has(chunkId)) continue;
-      this.emitBlock(layout, chunkId, commands, stamps, emitted);
+      this.emitBlock(layout, chunkId, commands, stamps, emitted, time);
     }
     return { commands };
   }
@@ -136,6 +152,7 @@ export class DrawListBuilder {
     commands: DrawCommand[],
     stamps: (chunkId: number, glyph: GlyphInstance) => GlyphStamp | undefined,
     emitted: Set<number>,
+    time: number,
   ): void {
     emitted.add(chunkId);
     const record = layout.record(chunkId);
@@ -174,11 +191,11 @@ export class DrawListBuilder {
       });
     }
     for (const line of record.lines) {
-      this.emitLine(line, commands, stamps);
+      this.emitLine(line, commands, stamps, time);
     }
-    this.emitMarker(layout, record, commands);
+    this.emitMarker(layout, record, commands, time);
     for (const child of record.children) {
-      this.emitBlockLayout(layout, child, commands, stamps, emitted);
+      this.emitBlockLayout(layout, child, commands, stamps, emitted, time);
     }
   }
 
@@ -188,6 +205,7 @@ export class DrawListBuilder {
     commands: DrawCommand[],
     stamps: (chunkId: number, glyph: GlyphInstance) => GlyphStamp | undefined,
     emitted: Set<number>,
+    time: number,
   ): void {
     emitted.add(block.chunkId);
     const bg = block.style.backgroundColor;
@@ -195,16 +213,21 @@ export class DrawListBuilder {
       commands.push({ type: 'fill', x: block.x, y: block.y, w: block.w, h: block.h, color: bg });
     }
     for (const line of block.lines) {
-      this.emitLine(line, commands, stamps);
+      this.emitLine(line, commands, stamps, time);
     }
-    this.emitMarker(layout, block, commands);
+    this.emitMarker(layout, block, commands, time);
     for (const child of block.children) {
-      this.emitBlockLayout(layout, child, commands, stamps, emitted);
+      this.emitBlockLayout(layout, child, commands, stamps, emitted, time);
     }
   }
 
   /** Emit a list marker as glyphs at its baseline. */
-  private emitMarker(layout: LayoutEngine, block: BlockLayout, commands: DrawCommand[]): void {
+  private emitMarker(
+    layout: LayoutEngine,
+    block: BlockLayout,
+    commands: DrawCommand[],
+    time: number,
+  ): void {
     const marker = block.marker;
     if (marker === undefined || marker.text.length === 0) return;
     const atlas = layout.document.atlases[block.style.fontId];
@@ -224,7 +247,7 @@ export class DrawListBuilder {
           y: marker.y - stamp.offsetY,
           w: stamp.quadW,
           h: stamp.quadH,
-          color,
+          color: this.glyphColor(color, x, time),
           pxPerTexel: stamp.texelsPerEm > 0 ? fontSize / stamp.texelsPerEm : 1,
         });
       }
@@ -236,6 +259,7 @@ export class DrawListBuilder {
     line: LineLayout,
     commands: DrawCommand[],
     stamps: (chunkId: number, glyph: GlyphInstance) => GlyphStamp | undefined,
+    time: number,
   ): void {
     for (const glyph of line.glyphs) {
       if (glyph.markOf !== undefined) continue; // marks ride with the base
@@ -251,7 +275,7 @@ export class DrawListBuilder {
         y: glyph.y - stamp.offsetY,
         w: stamp.quadW,
         h: stamp.quadH,
-        color: themedColor(glyph.color, this.theme),
+        color: this.glyphColor(glyph.color, glyph.x, time),
         pxPerTexel: stamp.texelsPerEm > 0 ? glyph.fontSizePx / stamp.texelsPerEm : 1,
       });
     }

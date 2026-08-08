@@ -28,6 +28,7 @@ import { DrawListBuilder } from '../render/drawlist.js';
 import type { TextureResolver } from '../render/drawlist.js';
 import { parseThemeInk, themedColor } from '../render/theme.js';
 import type { Theme } from '../render/theme.js';
+import type { Effects } from '../render/effects.js';
 import type { RendererAdapter, TextureSource } from '../render/adapter.js';
 import { WebGlRenderer } from '../render/gl.js';
 import {
@@ -93,6 +94,13 @@ export interface LoadOptions {
    * own colors (SPEC/rendering contract unchanged).
    */
   readonly theme?: { readonly ink: string };
+  /**
+   * Host render effects (presentation, `render/effects.ts`): `accent` marks
+   * a color — glyphs the document paints in that exact color render with a
+   * time-animated running highlight (the host repaints to advance it; the
+   * runtime never self-animates). Omit for the identity.
+   */
+  readonly effects?: { readonly accent: string };
   /** The time source (determinism seam; production uses the wall clock). */
   readonly clock?: Clock;
 }
@@ -113,6 +121,7 @@ export class DocumentHost implements Document {
   private readonly renderer: RendererAdapter;
   private readonly builder: DrawListBuilder;
   private readonly theme: Theme | undefined;
+  private readonly effects: Effects | undefined;
   private readonly clock: Clock;
   private readonly margin: number;
   private readonly dpr: number;
@@ -154,10 +163,15 @@ export class DocumentHost implements Document {
       yieldPenalty: 1,
     });
     this.theme = parseTheme(options.theme);
+    this.effects = parseEffects(options.effects);
     this.builder = new DrawListBuilder(
-      this.theme === undefined
+      this.theme === undefined && this.effects === undefined
         ? { texture: this.textureResolver }
-        : { texture: this.textureResolver, theme: this.theme },
+        : {
+            texture: this.textureResolver,
+            ...(this.theme === undefined ? {} : { theme: this.theme }),
+            ...(this.effects === undefined ? {} : { effects: this.effects }),
+          },
     );
     this.renderer = createRenderer(options.renderer, options.canvas, this.textureSource);
     this.topLevelIds = new Set(doc.childIds(doc.root.id));
@@ -223,7 +237,10 @@ export class DocumentHost implements Document {
     assertAlive(this);
     const result = computeVisibleSet(this.doc, this.layout, this.viewport, this.margin);
     const selection = this.selection === undefined ? [] : rangeQuads(this.layout, this.selection);
-    const list = this.builder.build(this.layout, result.visible, this.stampLookup, selection);
+    // The effects clock (animation time, seconds): the draw list is a pure
+    // function of its inputs plus this time — deterministic per frame.
+    const time = this.effects === undefined ? 0 : this.clock.now() / 1000;
+    const list = this.builder.build(this.layout, result.visible, this.stampLookup, selection, time);
     this.renderer.draw(list, {
       x: this.viewport.x,
       y: this.viewport.y,
@@ -429,6 +446,19 @@ function parseTheme(theme: LoadOptions['theme']): Theme | undefined {
   return { ink };
 }
 
+/** Parse the host effects option (rejected with the typed error when invalid). */
+function parseEffects(effects: LoadOptions['effects']): Effects | undefined {
+  if (effects === undefined) return undefined;
+  const accent = parseThemeInk(effects.accent);
+  if (accent === undefined) {
+    throw new RuntimeError(
+      'invalid-options',
+      `effects.accent must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(effects.accent)}`,
+    );
+  }
+  return { accent };
+}
+
 /** Validate load options; reject nonsense with a typed error. */
 function validateOptions(options: LoadOptions): void {
   const reject = (message: string): never => {
@@ -456,6 +486,11 @@ function validateOptions(options: LoadOptions): void {
   }
   if (options.theme !== undefined && parseThemeInk(options.theme.ink) === undefined) {
     reject(`theme.ink must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(options.theme.ink)}`);
+  }
+  if (options.effects !== undefined && parseThemeInk(options.effects.accent) === undefined) {
+    reject(
+      `effects.accent must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(options.effects.accent)}`,
+    );
   }
 }
 

@@ -269,6 +269,29 @@ describe('DrawListBuilder', () => {
     }
   });
 
+  it('effects: the accent color animates with time; everything else is untouched', async () => {
+    const { engine, visibleIds } = await goldenSetup();
+    const ACCENT = 0x3366_99ff; // the golden's styled paragraph color
+    const builder = new DrawListBuilder({ texture: resolver(), effects: { accent: ACCENT } });
+    const t0 = glyphsOf(builder.build(engine, visibleIds, stampFor(engine), [], 0));
+    const t1 = glyphsOf(builder.build(engine, visibleIds, stampFor(engine), [], 1.234));
+    expect(t0.length).toBeGreaterThan(0);
+    // Deterministic at a fixed time.
+    const t0b = glyphsOf(builder.build(engine, visibleIds, stampFor(engine), [], 0));
+    expect(t0b.map((g) => g.color)).toEqual(t0.map((g) => g.color));
+    // The accent glyphs (the styled paragraphs) changed color as time moved.
+    expect(t0.some((g, i) => g.color !== t1[i]!.color)).toBe(true);
+    // Default-ink glyphs never change.
+    for (let i = 0; i < t0.length; i++) {
+      if (t0[i]!.color === 0x0000_00ff) expect(t1[i]!.color).toBe(0x0000_00ff);
+    }
+    // Geometry is identical between frames (only the presented color moves).
+    for (let i = 0; i < t0.length; i++) {
+      expect(t1[i]!.uv).toEqual(t0[i]!.uv);
+      expect(t1[i]!.x).toBe(t0[i]!.x);
+    }
+  });
+
   it('theme re-inks rulers (ink content); markers are covered above via the golden', async () => {
     const chunks = chnkPayload([
       { id: 1, kind: ChunkKind.Document, flags: 1 << 4, firstChildId: 2, lastChildId: 2 },

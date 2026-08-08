@@ -85,6 +85,8 @@ describe('load', () => {
       { theme: { ink: 'white' } },
       { theme: { ink: '#fff' } },
       { theme: { ink: '#gggggg' } },
+      { effects: { accent: 'blue' } },
+      { effects: { accent: '#12345' } },
     ];
     for (const overrides of cases) {
       await expect(
@@ -113,6 +115,17 @@ describe('load', () => {
       expect(doc.destroyed).toBe(false);
       doc.destroy();
     }
+  });
+
+  it('loads with render effects (animated accent) and paints', async () => {
+    const doc = await load(pipelineGolden(), {
+      canvas: fakeCanvas(),
+      effects: { accent: '#d9822b' },
+    });
+    doc.scroll({ x: 0, y: 0, w: 800, h: 600 }, 1);
+    doc.paint();
+    expect(doc.destroyed).toBe(false);
+    doc.destroy();
   });
 });
 

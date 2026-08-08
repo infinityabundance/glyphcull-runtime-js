@@ -70,7 +70,8 @@ ESM with bundled TypeScript declarations:
 ```ts
 import { load, RuntimeError } from 'glyphcull-runtime-js';
 
-const doc = await load(cullBytes, {
+```js
+const doc = await load(bytes, {
   canvas,              // HTMLCanvasElement (WebGL, with Canvas 2D fallback)
   dpr: window.devicePixelRatio,
   width: 800,
@@ -80,8 +81,10 @@ const doc = await load(cullBytes, {
   glyphBudgetBytes: 16 * 1024 * 1024,
   frameBudgetMs: 8,
   coolingPeriodMs: 1500,
-  theme: { ink: '#ffffff' }, // optional: re-ink the document for dark mode
+  theme: { ink: '#ffffff' },      // optional: re-ink the document for dark mode
+  effects: { accent: '#d9822b' }, // optional: animate glyphs of this color
 });
+```
 doc.scroll({ x: 0, y: 400, w: 800, h: 600 });
 doc.paint();
 try {
@@ -128,6 +131,16 @@ renders exactly as compiled. See `src/render/theme.ts`.
 ```js
 const dark = await load(bytes, { canvas, theme: { ink: '#ffffff' } });
 ```
+
+## Render effects (host animation)
+
+`load()` accepts an optional `effects: { accent: '#rrggbb' }` — glyphs the
+document paints in that exact color render with a **running highlight**: a
+light band sweeps along the bar over time, positioned by the glyph's x and
+an animation time the host advances by repainting (`doc.paint()` on a rAF
+loop). The runtime never self-animates; a paint at a fixed time is
+deterministic. Every other color, image, and background is untouched. See
+`src/render/effects.ts`.
 
 ## Rendering convention (normative)
 

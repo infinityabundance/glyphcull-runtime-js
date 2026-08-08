@@ -4,6 +4,20 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Added (render effects — the animated accent)
+
+- `load()` accepts an optional `effects: { accent: '#rrggbb' }`: glyphs the
+  document paints in that exact color render with a **running highlight** —
+  a light band whose position is a pure function of the glyph's x and an
+  animation time (seconds) the host advances by repainting on a rAF loop
+  (`render/effects.ts`, applied in `drawlist.ts`; `paint()` passes the
+  clock when effects are configured). The runtime never self-animates; a
+  paint at a fixed time is byte-deterministic; no effects → identity
+  (goldens unchanged). Used by the demo to animate the top-performer bar of
+  every chart. Tests: `drawlist` (accent animates with time, geometry
+  identical, deterministic per frame, default ink untouched) and `api`
+  (option validation + themed/accent loads).
+
 ### Fixed (table columns size to their text — no more 32px collapse)
 
 - `cellNaturalWidth` measured only each cell's **direct** text payload; but
