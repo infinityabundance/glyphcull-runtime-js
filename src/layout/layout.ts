@@ -985,17 +985,79 @@ export class LayoutEngine implements GeometrySource {
 
   private cellNaturalWidth(cellId: number, maxWidth: number): number {
     const style = this.styleOf(cellId);
-    const atlas = this.atlasFor(style);
+    // The natural width of the cell's content: paragraph/heading/caption
+    // text is laid out in runs, so the widest natural line is measured per
+    // run with the run's own style (a `code` run measures with the mono
+    // atlas, mixed styles sum correctly). Containers (lists, nested tables)
+    // and images have no single natural text width: keep the conservative
+    // two-em floor so a column never collapses below its content line height.
     let max = 0;
     for (const childId of this.doc.childIds(cellId)) {
-      const child = this.doc.chunk(childId)!;
-      const text = this.doc.directText(child.id) ?? '';
-      if (atlas !== undefined && text.length > 0) {
-        const measured = measureRun(atlas, text, style.fontSizePx, style.letterSpacing);
-        max = Math.max(max, measured.widthPx);
-      }
+      const child = this.doc.chunk(childId);
+      if (child === undefined) continue;
+      const natural = this.blockNaturalWidth(childId);
+      if (natural !== undefined) max = Math.max(max, natural);
     }
     return Math.min(Math.max(max, style.fontSizePx * 2), maxWidth);
+  }
+
+  /**
+   * The natural width of a text block: the widest line of its inline content
+   * (hard breaks end a line), measured per run with the run's own style. Only
+   * text blocks return a width; containers and images return `undefined`.
+   */
+  private blockNaturalWidth(blockId: number): number | undefined {
+    const chunk = this.doc.chunk(blockId);
+    if (chunk === undefined) return undefined;
+    switch (chunk.kind) {
+      case ChunkKind.Paragraph:
+      case ChunkKind.Heading1:
+      case ChunkKind.Heading2:
+      case ChunkKind.Heading3:
+      case ChunkKind.Heading4:
+      case ChunkKind.Heading5:
+      case ChunkKind.Heading6:
+      case ChunkKind.Caption: {
+        let segment = 0;
+        let widest = 0;
+        const walk = (id: number): void => {
+          const c = this.doc.chunk(id);
+          if (c === undefined) return;
+          if (c.kind === ChunkKind.Br) {
+            widest = Math.max(widest, segment);
+            segment = 0;
+            return;
+          }
+          const text = this.doc.directText(id);
+          if (text !== undefined && text.length > 0) {
+            const runStyle = this.styleOf(id);
+            const atlas = this.atlasFor(runStyle);
+            if (atlas !== undefined) {
+              segment += measureRun(atlas, text, runStyle.fontSizePx, runStyle.letterSpacing)
+                .widthPx;
+            }
+          }
+          for (const childId of this.doc.childIds(id)) walk(childId);
+        };
+        walk(blockId);
+        return Math.max(widest, segment);
+      }
+      case ChunkKind.CodeBlock: {
+        const text = this.doc.directText(blockId) ?? '';
+        if (text.length === 0) return undefined;
+        const runStyle = this.styleOf(blockId);
+        const atlas = this.atlasFor(runStyle);
+        if (atlas === undefined) return undefined;
+        let widest = 0;
+        for (const line of text.split('\n')) {
+          const measured = measureRun(atlas, line, runStyle.fontSizePx, runStyle.letterSpacing);
+          widest = Math.max(widest, measured.widthPx);
+        }
+        return widest;
+      }
+      default:
+        return undefined;
+    }
   }
 
   // -------------------------------------------------------------------------

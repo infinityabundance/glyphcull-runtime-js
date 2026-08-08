@@ -4,6 +4,21 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Fixed (table columns size to their text — no more 32px collapse)
+
+- `cellNaturalWidth` measured only each cell's **direct** text payload; but
+  cell content is laid out in paragraph → run chunks, so every normal table
+  cell measured as empty and every column collapsed to the two-em floor
+  (32px at 16px text). Tables with wide content (device names, `#`/`█`
+  chart bars) wrapped into narrow strips. The natural width is now measured
+  per run with the run's own style (a `code` run uses the mono atlas;
+  mixed styles sum correctly; hard breaks end a line) — `blockNaturalWidth`
+  — so columns size to their content and glyph-drawn chart bars stay on one
+  line. Mirrors the Rust core fix. Tests: `layout.test.ts`
+  `sizes table columns from the natural width of the cell text (per-run)`;
+  the Rust `table_honors_rowspan_and_grows_the_last_spanned_row` now drives
+  wrapping with a narrow table instead of the 32px collapse.
+
 ### Added (host theming — the `theme` load option)
 
 - `load()` accepts an optional `theme: { ink }` (hex `#rrggbb` / `#rrggbbaa`): a
