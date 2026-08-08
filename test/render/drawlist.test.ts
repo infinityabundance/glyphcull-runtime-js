@@ -244,4 +244,52 @@ describe('DrawListBuilder', () => {
       { numRuns: 50 },
     );
   });
+
+  it('theme re-inks only the document default ink; other colors survive', async () => {
+    const { engine, visibleIds } = await goldenSetup();
+    // The golden stylesheet colors paragraphs #336699; headings, list items,
+    // and the disc markers keep the compiler default ink #000000.
+    const plain = new DrawListBuilder({ texture: resolver() });
+    const themed = new DrawListBuilder({ texture: resolver(), theme: { ink: 0xffff_ffff } });
+    const plainGlyphs = glyphsOf(plain.build(engine, visibleIds, stampFor(engine)));
+    const themedGlyphs = glyphsOf(themed.build(engine, visibleIds, stampFor(engine)));
+    expect(plainGlyphs.length).toBeGreaterThan(0);
+    const plainColors = new Set(plainGlyphs.map((g) => g.color));
+    expect(plainColors.has(0x0000_00ff)).toBe(true); // default ink is present
+    expect(plainColors.has(0x3366_99ff)).toBe(true); // styled paragraph color is present
+    const themedColors = new Set(themedGlyphs.map((g) => g.color));
+    expect(themedColors.has(0xffff_ffff)).toBe(true); // default ink re-inked
+    expect(themedColors.has(0x3366_99ff)).toBe(true); // non-default color preserved
+    expect(themedColors.has(0x0000_00ff)).toBe(false); // default ink fully replaced
+    // Geometry is untouched: same count, same uv stream and x positions.
+    expect(themedGlyphs).toHaveLength(plainGlyphs.length);
+    for (let i = 0; i < plainGlyphs.length; i++) {
+      expect(themedGlyphs[i]!.uv).toEqual(plainGlyphs[i]!.uv);
+      expect(themedGlyphs[i]!.x).toBe(plainGlyphs[i]!.x);
+    }
+  });
+
+  it('theme re-inks rulers (ink content); markers are covered above via the golden', async () => {
+    const chunks = chnkPayload([
+      { id: 1, kind: ChunkKind.Document, flags: 1 << 4, firstChildId: 2, lastChildId: 2 },
+      { id: 2, kind: ChunkKind.Hr, parentId: 1, depth: 1 },
+    ]);
+    const bytes = buildPackage([
+      { kind: 1, compression: 1, payload: infoPayload({ chunk_count: 2, style_count: 1 }) },
+      { kind: 2, compression: 1, payload: chunks },
+      { kind: 3, compression: 1, payload: new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) },
+      { kind: 4, compression: 1, payload: contPayload([]) },
+    ]);
+    const parsed = await readPackage(bytes);
+    if (!parsed.ok) throw parsed.error;
+    const model = buildDocument(parsed.value);
+    if (!model.ok) throw model.error;
+    const engine = new LayoutEngine(model.value, { dpr: 1, contentWidth: 800 });
+    engine.extendTo(Number.POSITIVE_INFINITY);
+    const builder = new DrawListBuilder({ texture: resolver(), theme: { ink: 0xffff_ffff } });
+    const list = builder.build(engine, [1, 2], stampFor(engine));
+    const ruler = list.commands.find((c) => c.type === 'ruler');
+    expect(ruler).toBeDefined();
+    expect(ruler!.color).toBe(0xffff_ffff);
+  });
 });

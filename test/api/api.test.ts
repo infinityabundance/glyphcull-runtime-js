@@ -82,6 +82,9 @@ describe('load', () => {
       { glyphBudgetBytes: -1 },
       { frameBudgetMs: 0 },
       { coolingPeriodMs: -1 },
+      { theme: { ink: 'white' } },
+      { theme: { ink: '#fff' } },
+      { theme: { ink: '#gggggg' } },
     ];
     for (const overrides of cases) {
       await expect(
@@ -100,6 +103,16 @@ describe('load', () => {
     const doc = await load(pipelineGolden(), { canvas: fakeCanvas(), renderer: 'auto' });
     expect(doc.destroyed).toBe(false);
     doc.destroy();
+  });
+
+  it('loads with a host theme (#rrggbb and #rrggbbaa ink) and paints', async () => {
+    for (const ink of ['#ffffff', '#ffffff80']) {
+      const doc = await load(pipelineGolden(), { canvas: fakeCanvas(), theme: { ink } });
+      doc.scroll({ x: 0, y: 0, w: 800, h: 600 }, 1);
+      doc.paint();
+      expect(doc.destroyed).toBe(false);
+      doc.destroy();
+    }
   });
 });
 

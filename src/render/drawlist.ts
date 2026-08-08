@@ -15,6 +15,8 @@ import type { GlyphInstance } from '../layout/layout.js';
 import { ChunkKind } from '../format/sections.js';
 import { measureRun } from '../layout/measure.js';
 import type { SelectionQuad } from '../selection/selection.js';
+import { themedColor } from './theme.js';
+import type { Theme } from './theme.js';
 
 /** A textured glyph quad. */
 export interface GlyphCommand {
@@ -77,14 +79,18 @@ export interface TextureResolver {
 /** Options for the draw list builder. */
 export interface DrawListOptions {
   readonly texture: TextureResolver;
+  /** Host presentation: re-ink the document's default ink (see `theme.ts`). */
+  readonly theme?: Theme;
 }
 
 /** The draw list builder. */
 export class DrawListBuilder {
   private readonly texture: TextureResolver;
+  private readonly theme: Theme | undefined;
 
   constructor(options: DrawListOptions) {
     this.texture = options.texture;
+    this.theme = options.theme;
   }
 
   /**
@@ -140,7 +146,7 @@ export class DrawListBuilder {
         x: record.ruler.x,
         y: record.ruler.y,
         w: record.ruler.w,
-        color: record.style.color,
+        color: themedColor(record.style.color, this.theme),
       });
       return;
     }
@@ -203,11 +209,12 @@ export class DrawListBuilder {
     if (marker === undefined || marker.text.length === 0) return;
     const atlas = layout.document.atlases[block.style.fontId];
     if (atlas === undefined) return;
+    const color = themedColor(block.style.color, this.theme);
     const fontSize = block.style.fontSizePx;
     const measured = measureRun(atlas, marker.text, fontSize, 0);
     let x = marker.x;
     for (const metric of measured.glyphs) {
-      const stamp = prepareGlyph(atlas, metric.codepoint, fontSize, block.style.color);
+      const stamp = prepareGlyph(atlas, metric.codepoint, fontSize, color);
       if (stamp !== undefined && !stamp.noOutline) {
         commands.push({
           type: 'glyph',
@@ -217,7 +224,7 @@ export class DrawListBuilder {
           y: marker.y - stamp.offsetY,
           w: stamp.quadW,
           h: stamp.quadH,
-          color: block.style.color,
+          color,
           pxPerTexel: stamp.texelsPerEm > 0 ? fontSize / stamp.texelsPerEm : 1,
         });
       }
@@ -244,7 +251,7 @@ export class DrawListBuilder {
         y: glyph.y - stamp.offsetY,
         w: stamp.quadW,
         h: stamp.quadH,
-        color: glyph.color,
+        color: themedColor(glyph.color, this.theme),
         pxPerTexel: stamp.texelsPerEm > 0 ? glyph.fontSizePx / stamp.texelsPerEm : 1,
       });
     }

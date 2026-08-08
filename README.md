@@ -80,6 +80,7 @@ const doc = await load(cullBytes, {
   glyphBudgetBytes: 16 * 1024 * 1024,
   frameBudgetMs: 8,
   coolingPeriodMs: 1500,
+  theme: { ink: '#ffffff' }, // optional: re-ink the document for dark mode
 });
 doc.scroll({ x: 0, y: 400, w: 800, h: 600 });
 doc.paint();
@@ -110,6 +111,22 @@ src/
   render/         — WebGL renderer (MSDF), Canvas 2D fallback, draw list executor
   selection/      — hit testing, selection model, copy extraction
 tests/            — unit, integration, property, stress, memory, perf regression
+```
+
+## Theming (host presentation)
+
+`load()` accepts an optional `theme` — a host presentation hint that re-inks
+the document without touching the package: `{ ink: '#rrggbb' | '#rrggbbaa' }`
+replaces the document's **default ink** (`#000000`, the color the compiler
+uses for text, headings, list markers, and rules that the source did not
+color) with the given color — e.g. white for a dark reader. Every other
+color (links, highlights, backgrounds) and every image is preserved, so a
+monochrome document themes fully while a colored document keeps its accents.
+The rule is exact-match and deterministic; without a `theme` the document
+renders exactly as compiled. See `src/render/theme.ts`.
+
+```js
+const dark = await load(bytes, { canvas, theme: { ink: '#ffffff' } });
 ```
 
 ## Rendering convention (normative)

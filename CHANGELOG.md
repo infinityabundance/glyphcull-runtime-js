@@ -4,6 +4,19 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Added (host theming — the `theme` load option)
+
+- `load()` accepts an optional `theme: { ink }` (hex `#rrggbb` / `#rrggbbaa`): a
+  host presentation hint that re-inks the document's **default ink** (`#000000` —
+  text, headings, list markers, and rules the source did not color) with the given
+  color, e.g. `{ ink: '#ffffff' }` for a dark reader. Every other color, image, and
+  background is preserved; the rule is exact-match and deterministic; no `theme`
+  means the document renders exactly as compiled (goldens unchanged). Applied at
+  stamp preparation, stamp lookup, and draw-list emission (glyphs, markers,
+  rulers) — `render/theme.ts`, `api/runtime.ts`, `render/drawlist.ts`. Tests:
+  `test/render/drawlist.test.ts` (ink-only substitution, geometry unchanged,
+  ruler re-ink) and `test/api/api.test.ts` (option validation + themed load).
+
 ### Fixed (table captions lay out above the rows)
 
 - `layoutTable` now recognizes a `caption` chunk child (SPEC.md §2.2) and lays it

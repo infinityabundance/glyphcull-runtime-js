@@ -26,6 +26,8 @@ import type { MaterializeWorker } from '../materialize/scheduler.js';
 import { Canvas2dRenderer } from '../render/canvas2d.js';
 import { DrawListBuilder } from '../render/drawlist.js';
 import type { TextureResolver } from '../render/drawlist.js';
+import { parseThemeInk, themedColor } from '../render/theme.js';
+import type { Theme } from '../render/theme.js';
 import type { RendererAdapter, TextureSource } from '../render/adapter.js';
 import { WebGlRenderer } from '../render/gl.js';
 import {
@@ -83,6 +85,14 @@ export interface LoadOptions {
   readonly coolingPeriodMs?: number;
   /** Renderer preference: 'auto' (default), 'webgl', or 'canvas2d'. */
   readonly renderer?: 'auto' | 'webgl' | 'canvas2d';
+  /**
+   * Host text presentation: re-ink the document's default ink color
+   * (`#000000` — body text, headings, markers, rules that the source did not
+   * color) with `ink`, e.g. `{ ink: '#ffffff' }` for a dark reader. Other
+   * colors, images, and backgrounds are preserved. Omit for the document's
+   * own colors (SPEC/rendering contract unchanged).
+   */
+  readonly theme?: { readonly ink: string };
   /** The time source (determinism seam; production uses the wall clock). */
   readonly clock?: Clock;
 }
@@ -102,6 +112,7 @@ export class DocumentHost implements Document {
   private readonly scheduler: MaterializationScheduler;
   private readonly renderer: RendererAdapter;
   private readonly builder: DrawListBuilder;
+  private readonly theme: Theme | undefined;
   private readonly clock: Clock;
   private readonly margin: number;
   private readonly dpr: number;
@@ -142,7 +153,12 @@ export class DocumentHost implements Document {
       frameBudgetMs: options.frameBudgetMs,
       yieldPenalty: 1,
     });
-    this.builder = new DrawListBuilder({ texture: this.textureResolver });
+    this.theme = parseTheme(options.theme);
+    this.builder = new DrawListBuilder(
+      this.theme === undefined
+        ? { texture: this.textureResolver }
+        : { texture: this.textureResolver, theme: this.theme },
+    );
     this.renderer = createRenderer(options.renderer, options.canvas, this.textureSource);
     this.topLevelIds = new Set(doc.childIds(doc.root.id));
     const width = options.width ?? (options.canvas.clientWidth || options.contentWidth);
@@ -334,7 +350,7 @@ export class DocumentHost implements Document {
     },
   };
 
-  /** The draw list's stamp lookup: the glyph cache. */
+  /** The draw list's stamp lookup: the glyph cache (themed ink). */
   private readonly stampLookup = (
     chunkId: number,
     glyph: GlyphInstance,
@@ -344,18 +360,23 @@ export class DocumentHost implements Document {
       atlasId: glyph.atlasId,
       codepoint: glyph.codepoint,
       fontSizePx: glyph.fontSizePx,
-      color: glyph.color,
+      color: themedColor(glyph.color, this.theme),
     });
   };
 
-  /** Prepare and cache the stamps of a block's laid-out glyphs. */
+  /** Prepare and cache the stamps of a block's laid-out glyphs (themed ink). */
   private prepareStamps(record: BlockLayout): void {
     for (const line of record.lines) {
       for (const glyph of line.glyphs) {
         if (glyph.markOf !== undefined || !glyph.hasOutline) continue;
         const atlas = this.doc.atlases[glyph.atlasId];
         if (atlas === undefined) continue;
-        const stamp = prepareGlyph(atlas, glyph.codepoint, glyph.fontSizePx, glyph.color);
+        const stamp = prepareGlyph(
+          atlas,
+          glyph.codepoint,
+          glyph.fontSizePx,
+          themedColor(glyph.color, this.theme),
+        );
         if (stamp === undefined) continue;
         // Stamps are owned by the run chunk carrying the glyph: eviction is
         // per chunk, so a culled run releases exactly its own stamps.
@@ -395,6 +416,19 @@ function isPoint(value: Point | Selection): value is Point {
   return typeof (value as Point).x === 'number' && typeof (value as Point).y === 'number';
 }
 
+/** Parse the host theme option (rejected with the typed error when invalid). */
+function parseTheme(theme: LoadOptions['theme']): Theme | undefined {
+  if (theme === undefined) return undefined;
+  const ink = parseThemeInk(theme.ink);
+  if (ink === undefined) {
+    throw new RuntimeError(
+      'invalid-options',
+      `theme.ink must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(theme.ink)}`,
+    );
+  }
+  return { ink };
+}
+
 /** Validate load options; reject nonsense with a typed error. */
 function validateOptions(options: LoadOptions): void {
   const reject = (message: string): never => {
@@ -419,6 +453,9 @@ function validateOptions(options: LoadOptions): void {
   }
   if (options.coolingPeriodMs !== undefined && !(options.coolingPeriodMs >= 0)) {
     reject(`coolingPeriodMs must be non-negative, got ${options.coolingPeriodMs}`);
+  }
+  if (options.theme !== undefined && parseThemeInk(options.theme.ink) === undefined) {
+    reject(`theme.ink must be '#rrggbb' or '#rrggbbaa', got ${JSON.stringify(options.theme.ink)}`);
   }
 }
 
