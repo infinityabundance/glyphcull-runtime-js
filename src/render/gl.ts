@@ -503,7 +503,11 @@ export class WebGlRenderer implements RendererAdapter {
       }
     }
     flush();
-    this.drawPost(gl, viewport.time ?? 0);
+    // The post shaders animate from a relative clock. The runtime's clock is
+    // wall time in seconds (an epoch magnitude); mediump float cannot hold
+    // fractions at that scale, so fract/floor-based animation would freeze.
+    // Bounding the time keeps it precise and deterministic per frame.
+    this.drawPost(gl, (viewport.time ?? 0) % 60);
   }
 
   /** The full-screen post pass: offscreen texture → drawing buffer. */

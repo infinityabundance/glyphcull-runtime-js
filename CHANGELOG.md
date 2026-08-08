@@ -4,6 +4,16 @@ All notable changes, reverse chronological. Keep a Changelog format; Semantic Ve
 
 ## [Unreleased]
 
+### Fixed (WebGL post effects froze under the wall clock)
+
+- The post shaders animate from `uTime`. The runtime's clock is wall time in
+  seconds — an epoch magnitude (~1.8e9) — and GLSL `mediump float` cannot
+  hold fractions at that scale, so the shaders' `fract`/`floor`-based
+  animation froze in real use (the test harness's fake clock, starting at
+  zero, masked this). `draw()` now bounds the time handed to the post pass
+  (`(viewport.time ?? 0) % 60`) — precise, deterministic per frame, and
+  animated — so the glitch/pixelated/retro passes actually run in hosts.
+
 ### Fixed (WebGL `glitch` post effect was imperceptible)
 
 - The `glitch` post mode's bursts fired for ~1% of each cycle with sub-pixel
